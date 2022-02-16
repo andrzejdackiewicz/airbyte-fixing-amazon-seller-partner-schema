@@ -19,6 +19,7 @@ public class SnowflakeSource extends AbstractJdbcSource<JDBCType> implements Sou
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SnowflakeSource.class);
   public static final String DRIVER_CLASS = "net.snowflake.client.jdbc.SnowflakeDriver";
+  public static final String SNOWFLAKE_HOST_POSTFIX = ".aws.snowflakecomputing.com";
 
   public SnowflakeSource() {
     super(DRIVER_CLASS, new SnowflakeJdbcStreamingQueryConfiguration(), new SnowflakeSourceOperations());
@@ -33,10 +34,8 @@ public class SnowflakeSource extends AbstractJdbcSource<JDBCType> implements Sou
 
   @Override
   public JsonNode toDatabaseConfig(final JsonNode config) {
-
     final StringBuilder jdbcUrl = new StringBuilder(String.format("jdbc:snowflake://%s/?",
-        config.get("host").asText()));
-
+        getHost(config)));
     // Add required properties
     jdbcUrl.append(String.format("role=%s&warehouse=%s&database=%s&schema=%s&JDBC_QUERY_RESULT_FORMAT=%s&CLIENT_SESSION_KEEP_ALIVE=%s",
         config.get("role").asText(),
@@ -61,6 +60,13 @@ public class SnowflakeSource extends AbstractJdbcSource<JDBCType> implements Sou
         .put("jdbc_url", jdbcUrl.toString());
 
     return Jsons.jsonNode(configBuilder.build());
+  }
+
+  private String getHost(JsonNode config) {
+    String host = config.get("host").asText();
+    return host.endsWith(SNOWFLAKE_HOST_POSTFIX)
+        ? host
+        : host.concat(SNOWFLAKE_HOST_POSTFIX);
   }
 
   @Override
