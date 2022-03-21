@@ -34,6 +34,9 @@ from source_stripe.streams import (
     SubscriptionItems,
     Subscriptions,
     Transfers,
+    IssuingCards,
+    IssuingDisputes,
+    IssuingTransactions,
 )
 
 
@@ -65,6 +68,9 @@ class SourceStripe(AbstractSource):
             InvoiceItems(**incremental_args),
             InvoiceLineItems(**args),
             Invoices(**incremental_args),
+            IssuingCards(**args),
+            IssuingDisputes(**incremental_args),
+            IssuingTransactions(**incremental_args),
             PaymentIntents(**incremental_args),
             Payouts(**incremental_args),
             Plans(**incremental_args),

@@ -511,3 +511,52 @@ class PromotionCodes(IncrementalStripeStream):
 
     def path(self, **kwargs):
         return "promotion_codes"
+
+
+class Issuing(IncrementalStripeStream):
+    """
+    API docs: https://stripe.com/docs/api/issuing
+    This class stands for easy inheritance for [ IssuingCards, IssuingDisputes, IssuingTransactions ] streams.
+    """
+    
+    cursor_field = "created"
+    
+    def request_headers(self, **kwargs) -> Mapping[str, Any]:
+        """
+        We don't need to pass anything else, except of Authorization Header inside the params, to reach any of:
+        ::  [ IssuingCards, IssuingDisputes, IssuingTransactions ] streams.
+        """
+        return {}
+
+
+class IssuingCards(Issuing):
+    """
+    API docs: https://stripe.com/docs/api/issuing/cards/list
+    
+    TODO: add schemas
+    """
+
+    def path(self, **kwargs):
+        return "issuing/cards"
+
+
+class IssuingDisputes(Issuing):
+    """
+    API docs: https://stripe.com/docs/api/issuing/disputes/list
+    
+    TODO: add schemas
+    """
+
+    def path(self, **kwargs):
+        return "issuing/disputes"
+    
+
+class IssuingTransactions(Issuing):
+    """
+    API docs: https://stripe.com/docs/api/issuing/transctions/list
+    
+    TODO: add schemas
+    """
+
+    def path(self, **kwargs):
+        return "issuing/transactions"
