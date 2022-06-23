@@ -3,6 +3,7 @@
 #
 
 
+import os
 import json
 import logging
 from pathlib import Path
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 class ConnectorRunner:
     def __init__(self, image_name: str, volume: Path):
         self._client = docker.from_env()
+        self._cassette_ctx = "SAT"
         try:
             self._image = self._client.images.get(image_name)
         except docker.errors.ImageNotFound:
@@ -34,6 +36,9 @@ class ConnectorRunner:
     @property
     def input_folder(self) -> Path:
         return self._volume_base / f"run_{self._runs}" / "input"
+
+    def set_cassette_context(self, ctx):
+        self._cassette_ctx = ctx
 
     def _prepare_volumes(self, config: Optional[Mapping], state: Optional[Mapping], catalog: Optional[ConfiguredAirbyteCatalog]):
         self.input_folder.mkdir(parents=True)
@@ -61,6 +66,17 @@ class ConnectorRunner:
                 "mode": "rw",
             },
         }
+
+        # FIXME make this better
+        # When recording, we want to save cassettes back to our local filesystem
+        # CASSETTE_PATH would be set to wherever we want to save these locally
+        cassette_path = os.getenv("CASSETTE_PATH")
+        if cassette_path:
+            volumes[cassette_path] = {
+                "bind": "/cassettes",
+                "mode": "rw"
+            }
+
         return volumes
 
     def call_spec(self, **kwargs) -> List[AirbyteMessage]:
@@ -100,6 +116,11 @@ class ConnectorRunner:
             volumes=volumes,
             network_mode="host",
             detach=True,
+            environment={
+                "CASSETTE_MODE": os.getenv("CASSETTE_MODE", "RECORD"),
+                "CASSETTE_PATH": "/cassettes/sat_cassettes",
+                "CASSETTE_NAME": self._cassette_ctx
+            },
             **kwargs,
         )
         with open(self.output_folder / "raw", "wb+") as f:
