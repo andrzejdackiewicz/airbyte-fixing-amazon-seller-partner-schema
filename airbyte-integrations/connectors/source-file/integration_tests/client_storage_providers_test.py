@@ -19,6 +19,7 @@ def check_read(config, expected_columns=10, expected_rows=42):
     assert len(rows[0]) == expected_columns
 
 
+@pytest.mark.fixture()
 @pytest.mark.parametrize(
     "provider_name,file_path,file_format",
     [
@@ -166,3 +167,17 @@ def test__read_from_private_azblob_sas_token(azblob_credentials, private_azblob_
         },
     }
     check_read(config)
+
+
+def test__read_from_private_box(box_credentials, private_box_file):
+    config = {
+        "dataset_name": "output",
+        "format": "csv",
+        "url": private_box_file,
+        "reader_options": json.dumps({"sep": ",", "nrows": 2}),
+        "provider": {
+            "storage": "BOX",
+            "access_token": box_credentials["access_token"],
+        },
+    }
+    check_read(config, expected_columns=4, expected_rows=2)

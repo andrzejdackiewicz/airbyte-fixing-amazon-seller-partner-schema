@@ -23,6 +23,8 @@ from google.cloud.storage import Client as GCSClient
 from google.oauth2 import service_account
 from yaml import safe_load
 
+from .box_client import BoxURLDownload
+
 
 class ConfigurationError(Exception):
     """Client mis-configured"""
@@ -97,6 +99,8 @@ class URLFile:
             return self._open_aws_url()
         elif storage == "azure://":
             return self._open_azblob_url()
+        elif storage == "box://":
+            return self._open_box_url()
         elif storage == "webhdfs://":
             host = self._provider["host"]
             port = self._provider["port"]
@@ -152,6 +156,8 @@ class URLFile:
             return "s3://"
         elif storage_name == "AZBLOB":
             return "azure://"
+        elif storage_name == "BOX":
+            return "box://"
         elif storage_name == "HTTPS":
             return "https://"
         elif storage_name == "SSH" or storage_name == "SCP":
@@ -220,6 +226,12 @@ class URLFile:
 
         url = f"{self.storage_scheme}{self.url}"
         return smart_open.open(url, transport_params=dict(client=client), **self.args)
+
+    def _open_box_url(self):
+        access_token = self._provider.get("access_token")
+        box = BoxURLDownload(access_token=access_token)
+        url = box.get_download_url(self.url)
+        return smart_open.open(url, **self.args)
 
 
 class Client:
@@ -363,6 +375,7 @@ class Client:
     def _cache_stream(self, fp):
         """cache stream to file"""
         fp_tmp = tempfile.TemporaryFile(mode="w+b")
+        fp_tmp.write(fp.read(2))
         fp_tmp.write(fp.read())
         fp_tmp.seek(0)
         fp.close()
