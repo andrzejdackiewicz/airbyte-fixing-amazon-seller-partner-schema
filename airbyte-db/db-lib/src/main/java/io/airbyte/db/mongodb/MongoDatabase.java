@@ -14,7 +14,8 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoIterable;
-import io.airbyte.commons.exceptions.ConnectionErrorException;
+import io.airbyte.commons.exceptions.ConfigErrorException;
+import io.airbyte.commons.exceptions.DisplayErrorMessage;
 import io.airbyte.commons.functional.CheckedFunction;
 import io.airbyte.commons.util.MoreIterators;
 import io.airbyte.db.AbstractDatabase;
@@ -51,7 +52,9 @@ public class MongoDatabase extends AbstractDatabase implements AutoCloseable {
       database = mongoClient.getDatabase(databaseName);
     } catch (final MongoConfigurationException e) {
       LOGGER.error(e.getMessage(), e);
-      throw new ConnectionErrorException(String.valueOf(e.getCode()), e.getMessage(), e);
+      final String displayMessage = DisplayErrorMessage.getErrorMessage(
+          String.valueOf(e.getCode()), 0, null /* =message */, e);
+      throw new ConfigErrorException(displayMessage, e);
     } catch (final Exception e) {
       LOGGER.error(e.getMessage(), e);
       throw new RuntimeException(e);

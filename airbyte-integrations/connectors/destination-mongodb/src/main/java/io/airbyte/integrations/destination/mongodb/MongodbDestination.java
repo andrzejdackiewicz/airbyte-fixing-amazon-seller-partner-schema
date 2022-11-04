@@ -5,7 +5,7 @@
 package io.airbyte.integrations.destination.mongodb;
 
 import static com.mongodb.client.model.Projections.excludeId;
-import static io.airbyte.integrations.base.errors.messages.ErrorMessage.getErrorMessage;
+import static io.airbyte.commons.exceptions.DisplayErrorMessage.getErrorMessage;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.annotations.VisibleForTesting;
@@ -14,7 +14,7 @@ import com.mongodb.MongoException;
 import com.mongodb.MongoSecurityException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
-import io.airbyte.commons.exceptions.ConnectionErrorException;
+import io.airbyte.commons.exceptions.ConfigErrorException;
 import io.airbyte.commons.util.MoreIterators;
 import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.db.mongodb.MongoDatabase;
@@ -87,12 +87,11 @@ public class MongodbDestination extends BaseConnector implements Destination {
         throw new MongodbDatabaseException(databaseName);
       }
       return new AirbyteConnectionStatus().withStatus(AirbyteConnectionStatus.Status.SUCCEEDED);
-    } catch (final ConnectionErrorException e) {
-      final String message = getErrorMessage(e.getStateCode(), e.getErrorCode(), e.getExceptionMessage(), e);
-      AirbyteTraceMessageUtility.emitConfigErrorTrace(e, message);
+    } catch (final ConfigErrorException e) {
+      AirbyteTraceMessageUtility.emitConfigErrorTrace(e, e.getDisplayMessage());
       return new AirbyteConnectionStatus()
           .withStatus(AirbyteConnectionStatus.Status.FAILED)
-          .withMessage(message);
+          .withMessage(e.getDisplayMessage());
     } catch (final RuntimeException e) {
       LOGGER.error("Check failed.", e);
       return new AirbyteConnectionStatus().withStatus(AirbyteConnectionStatus.Status.FAILED)
@@ -105,9 +104,11 @@ public class MongodbDestination extends BaseConnector implements Destination {
       return MoreIterators.toSet(mongoDatabase.getDatabaseNames().iterator());
     } catch (final MongoSecurityException e) {
       final MongoCommandException exception = (MongoCommandException) e.getCause();
-      throw new ConnectionErrorException(String.valueOf(exception.getCode()), e);
+      throw new ConfigErrorException(getErrorMessage(
+          String.valueOf(exception.getCode()), 0, null, exception), exception);
     } catch (final MongoException e) {
-      throw new ConnectionErrorException(String.valueOf(e.getCode()), e);
+      throw new ConfigErrorException(getErrorMessage(
+          String.valueOf(e.getCode()), 0, null, e), e);
     }
   }
 

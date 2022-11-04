@@ -5,6 +5,7 @@
 package io.airbyte.integrations.source.mongodb;
 
 import static com.mongodb.client.model.Filters.gt;
+import static io.airbyte.commons.exceptions.DisplayErrorMessage.getErrorMessage;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableMap;
@@ -12,7 +13,7 @@ import com.mongodb.MongoCommandException;
 import com.mongodb.MongoException;
 import com.mongodb.MongoSecurityException;
 import com.mongodb.client.MongoCollection;
-import io.airbyte.commons.exceptions.ConnectionErrorException;
+import io.airbyte.commons.exceptions.ConfigErrorException;
 import io.airbyte.commons.functional.CheckedConsumer;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.util.AutoCloseableIterator;
@@ -78,7 +79,7 @@ public class MongoDbSource extends AbstractDbSource<BsonType, MongoDatabase> {
     final List<CheckedConsumer<MongoDatabase, Exception>> checkList = new ArrayList<>();
     checkList.add(database -> {
       if (getAuthorizedCollections(database).isEmpty()) {
-        throw new ConnectionErrorException("Unable to execute any operation on the source!");
+        throw new ConfigErrorException("Unable to execute any operation on the source!");
       } else {
         LOGGER.info("The source passed the basic operation test!");
       }
@@ -141,9 +142,11 @@ public class MongoDbSource extends AbstractDbSource<BsonType, MongoDatabase> {
 
     } catch (final MongoSecurityException e) {
       final MongoCommandException exception = (MongoCommandException) e.getCause();
-      throw new ConnectionErrorException(String.valueOf(exception.getCode()), e);
+      throw new ConfigErrorException(getErrorMessage(
+          String.valueOf(exception.getCode()), 0, null, exception), exception);
     } catch (final MongoException e) {
-      throw new ConnectionErrorException(String.valueOf(e.getCode()), e);
+      throw new ConfigErrorException(getErrorMessage(
+          String.valueOf(e.getCode()), 0, null, e), e);
     }
   }
 

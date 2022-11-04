@@ -4,11 +4,9 @@
 
 package io.airbyte.integrations.destination.mysql;
 
-import static io.airbyte.integrations.base.errors.messages.ErrorMessage.getErrorMessage;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableMap;
-import io.airbyte.commons.exceptions.ConnectionErrorException;
+import io.airbyte.commons.exceptions.ConfigErrorException;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.map.MoreMaps;
 import io.airbyte.db.factory.DataSourceFactory;
@@ -73,8 +71,8 @@ public class MySQLDestination extends AbstractJdbcDestination implements Destina
       }
 
       return new AirbyteConnectionStatus().withStatus(Status.SUCCEEDED);
-    } catch (final ConnectionErrorException e) {
-      final String message = getErrorMessage(e.getStateCode(), e.getErrorCode(), e.getExceptionMessage(), e);
+    } catch (final ConfigErrorException e) {
+      final String message = e.getDisplayMessage();
       AirbyteTraceMessageUtility.emitConfigErrorTrace(e, message);
       return new AirbyteConnectionStatus()
           .withStatus(Status.FAILED)
