@@ -27,6 +27,9 @@ class AmplitudeStream(HttpStream, ABC):
         self.data_region = data_region
         super().__init__(**kwargs)
 
+    raise_on_http_errors = True
+    max_retries = 5
+
     @property
     def url_base(self) -> str:
         subdomain = "analytics.eu." if self.data_region == "EU Residency Server" else ""
@@ -45,6 +48,16 @@ class AmplitudeStream(HttpStream, ABC):
 
     def path(self, **kwargs) -> str:
         return f"{self.api_version}/{self.name}"
+
+    def backoff_time(self, response: requests.Response) -> Optional[int]:
+        if response.status_code == 429:
+            return 30
+
+    def should_retry(self, response: requests.Response) -> bool:
+        if response.status_code == 429:
+            setattr(self, "raise_on_http_errors", False)
+            return True
+        return super().should_retry(response)
 
 
 class Cohorts(AmplitudeStream):
@@ -122,24 +135,33 @@ class IncrementalAmplitudeStream(AmplitudeStream, ABC):
         return None
 
     def request_params(
-        self, stream_state: Mapping[str, Any], stream_slice: Mapping[str, any] = None, next_page_token: Mapping[str, Any] = None
+        self,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
+        **kwargs,
     ) -> MutableMapping[str, Any]:
         params = self.base_params
         if next_page_token:
             params.update(next_page_token)
         else:
-            start_datetime = self._start_date
-            if stream_state.get(self.cursor_field):
-                start_datetime = pendulum.parse(stream_state[self.cursor_field])
-
             params.update(
                 {
-                    "start": start_datetime.strftime(self.date_template),
-                    "end": self._get_end_date(start_datetime).strftime(self.date_template),
+                    "start": stream_slice.get("start"),
+                    "end": stream_slice.get("end"),
                 }
             )
-
         return params
+
+    def stream_slices(self, stream_state: Mapping[str, Any] = None, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
+        start = pendulum.parse(stream_state.get(self.cursor_field)) if stream_state else self._start_date
+        end = pendulum.now()
+        while start <= end:
+            self.logger.info(f"Stream {self.name}, requesting period: {start} -- {start.add(**self.time_interval)}")
+            yield {
+                "start": start.strftime(self.date_template),
+                "end": self._get_end_date(start).strftime(self.date_template),
+            }
+            start = start.add(**self.time_interval)
 
 
 class Events(IncrementalAmplitudeStream):
@@ -235,13 +257,22 @@ class ActiveUsers(IncrementalAmplitudeStream):
     primary_key = "date"
     time_interval = {"months": 1}
     data_field = "data"
+    max_retries = 100
 
     def parse_response(self, response: requests.Response, **kwargs) -> Iterable[Mapping]:
         response_data = response.json().get(self.data_field, [])
         if response_data:
-            series = list(map(list, zip(*response_data["series"])))
-            for i, date in enumerate(response_data["xValues"]):
-                yield from [{"date": date, "statistics": dict(zip(response_data["seriesLabels"], series[i]))}] if series else []
+            # Following the https://github.com/airbytehq/airbyte/issues/15208
+            # the additional length check of `series` objects should take place,
+            # to ensure that we have values to work with, otherwise yield []
+            series = response_data.get("series", [])
+            if len(series) > 0:
+                series = list(map(list, zip(*response_data["series"])))
+                for i, date in enumerate(response_data["xValues"]):
+                    yield from [{"date": date, "statistics": dict(zip(response_data["seriesLabels"], series[i]))}]
+            else:
+                self.logger.info(f"Stream `{self.name}` the `series` appears to be empty. Content: {series=}")
+                yield from []
 
     def path(self, **kwargs) -> str:
         return f"{self.api_version}/users"
