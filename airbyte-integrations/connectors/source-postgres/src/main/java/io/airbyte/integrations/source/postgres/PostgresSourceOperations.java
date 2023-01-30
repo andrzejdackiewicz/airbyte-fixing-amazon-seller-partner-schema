@@ -201,12 +201,14 @@ public class PostgresSourceOperations extends AbstractJdbcCompatibleSourceOperat
         default -> {
           switch (columnType) {
             case BOOLEAN -> putBoolean(json, columnName, resultSet, colIndex);
-            case TINYINT, SMALLINT -> putShortInt(json, columnName, resultSet, colIndex);
-            case INTEGER -> putInteger(json, columnName, resultSet, colIndex);
-            case BIGINT -> putBigInt(json, columnName, resultSet, colIndex);
+            // TODO(akashkulk) : Understand when the cast to string should be done. 
+            case TINYINT, SMALLINT -> putString(json, columnName, resultSet, colIndex);
+            case INTEGER -> putString(json, columnName, resultSet, colIndex);
+            case BIGINT -> putString(json, columnName, resultSet, colIndex);
             case FLOAT, DOUBLE -> putDouble(json, columnName, resultSet, colIndex);
-            case REAL -> putFloat(json, columnName, resultSet, colIndex);
-            case NUMERIC, DECIMAL -> putBigDecimal(json, columnName, resultSet, colIndex);
+            case REAL -> putString(json, columnName, resultSet, colIndex);
+            // Need to change
+            case NUMERIC, DECIMAL -> putString(json, columnName, resultSet, colIndex); //putBigDecimal(json, columnName, resultSet, colIndex);
             // BIT is a bit string in Postgres, e.g. '0100'
             case BIT, CHAR, VARCHAR, LONGVARCHAR -> putString(json, columnName, resultSet, colIndex);
             case DATE -> putDate(json, columnName, resultSet, colIndex);
@@ -427,94 +429,95 @@ public class PostgresSourceOperations extends AbstractJdbcCompatibleSourceOperat
   @Override
   public JsonSchemaType getAirbyteType(final PostgresType jdbcType) {
     return switch (jdbcType) {
-      case BOOLEAN -> JsonSchemaType.BOOLEAN;
-      case TINYINT, SMALLINT, INTEGER, BIGINT -> JsonSchemaType.INTEGER;
-      case FLOAT, DOUBLE, REAL, NUMERIC, DECIMAL -> JsonSchemaType.NUMBER;
-      case BLOB, BINARY, VARBINARY, LONGVARBINARY -> JsonSchemaType.STRING_BASE_64;
+      case BOOLEAN -> JsonSchemaType.BOOLEAN_V1;
+      case TINYINT, SMALLINT, INTEGER, BIGINT -> JsonSchemaType.INTEGER_V1;
+      case FLOAT, DOUBLE, REAL, NUMERIC, DECIMAL -> JsonSchemaType.NUMBER_V1;
+      case BLOB, BINARY, VARBINARY, LONGVARBINARY -> JsonSchemaType.BINARY_DATA_V1;
       case ARRAY -> JsonSchemaType.ARRAY;
       case BIT_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.BOOLEAN)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.BOOLEAN_V1)
               .build())
           .build();
       case BOOL_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.BOOLEAN)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.BOOLEAN_V1)
               .build())
           .build();
       case BYTEA_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case NAME_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case VARCHAR_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case CHAR_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case BPCHAR_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case TEXT_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.STRING_V1)
               .build())
           .build();
       case INT4_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.INTEGER)
+          .withItems(JsonSchemaType.INTEGER_V1)
           .build();
       case INT2_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.INTEGER)
+          .withItems(JsonSchemaType.INTEGER_V1)
           .build();
       case INT8_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.INTEGER)
+          .withItems(JsonSchemaType.INTEGER_V1)
           .build();
       case MONEY_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER_V1)
               .build())
           .build();
       case OID_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER_V1)
               .build())
           .build();
       case NUMERIC_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER_V1)
               .build())
           .build();
       case FLOAT4_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER_V1)
               .build())
           .build();
       case FLOAT8_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER)
+          .withItems(JsonSchemaType.builder(JsonSchemaPrimitive.NUMBER_V1)
               .build())
           .build();
       case TIMESTAMPTZ_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.STRING_TIMESTAMP_WITH_TIMEZONE)
+          .withItems(JsonSchemaType.TIMESTAMP_WITH_TIMEZONE_V1)
           .build();
       case TIMESTAMP_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.STRING_TIMESTAMP_WITHOUT_TIMEZONE)
+          .withItems(JsonSchemaType.TIMESTAMP_WITHOUT_TIMEZONE_V1)
           .build();
       case TIMETZ_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.STRING_TIME_WITH_TIMEZONE)
+          .withItems(JsonSchemaType.TIME_WITH_TIMEZONE_V1)
           .build();
       case TIME_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.STRING_TIME_WITHOUT_TIMEZONE)
+          .withItems(JsonSchemaType.TIME_WITHOUT_TIMEZONE_V1)
           .build();
       case DATE_ARRAY -> JsonSchemaType.builder(JsonSchemaPrimitive.ARRAY)
-          .withItems(JsonSchemaType.STRING_DATE)
+          .withItems(JsonSchemaType.DATE_V1)
           .build();
 
-      case DATE -> JsonSchemaType.STRING_DATE;
-      case TIME -> JsonSchemaType.STRING_TIME_WITHOUT_TIMEZONE;
-      case TIME_WITH_TIMEZONE -> JsonSchemaType.STRING_TIME_WITH_TIMEZONE;
-      case TIMESTAMP -> JsonSchemaType.STRING_TIMESTAMP_WITHOUT_TIMEZONE;
-      case TIMESTAMP_WITH_TIMEZONE -> JsonSchemaType.STRING_TIMESTAMP_WITH_TIMEZONE;
-      default -> JsonSchemaType.STRING;
+      case DATE -> JsonSchemaType.DATE_V1;
+      case TIME -> JsonSchemaType.TIME_WITHOUT_TIMEZONE_V1;
+      case TIME_WITH_TIMEZONE -> JsonSchemaType.TIME_WITH_TIMEZONE_V1;
+      case TIMESTAMP -> JsonSchemaType.TIMESTAMP_WITHOUT_TIMEZONE_V1;
+      case TIMESTAMP_WITH_TIMEZONE -> JsonSchemaType.TIMESTAMP_WITH_TIMEZONE_V1;
+
+      default -> JsonSchemaType.STRING_V1;
     };
   }
 
@@ -537,7 +540,7 @@ public class PostgresSourceOperations extends AbstractJdbcCompatibleSourceOperat
   protected void putBigDecimal(final ObjectNode node, final String columnName, final ResultSet resultSet, final int index) {
     final BigDecimal bigDecimal = DataTypeUtils.returnNullIfInvalid(() -> resultSet.getBigDecimal(index));
     if (bigDecimal != null) {
-      node.put(columnName, bigDecimal);
+      node.put(columnName, String.valueOf(bigDecimal));
     } else {
       // Special values (Infinity, -Infinity, and NaN) is default to null for now.
       // https://github.com/airbytehq/airbyte/issues/8902
@@ -550,13 +553,19 @@ public class PostgresSourceOperations extends AbstractJdbcCompatibleSourceOperat
     if (resultSet.getMetaData().getColumnTypeName(index).equals("money")) {
       putMoney(node, columnName, resultSet, index);
     } else {
-      super.putDouble(node, columnName, resultSet, index);
+      // Here, we parse the double and cast back to inaccuracy of REAL, DOUBLE, FLOAT.
+      node.put(columnName, String.valueOf(resultSet.getDouble(index)));
     }
+  }
+
+  @Override
+  protected void putFloat(final ObjectNode node, final String columnName, final ResultSet resultSet, final int index) throws SQLException {
+    node.put(columnName, String.valueOf(resultSet.getFloat(index)));
   }
 
   private void putMoney(final ObjectNode node, final String columnName, final ResultSet resultSet, final int index) throws SQLException {
     final String moneyValue = parseMoneyValue(resultSet.getString(index));
-    node.put(columnName, DataTypeUtils.returnNullIfInvalid(() -> Double.valueOf(moneyValue), Double::isFinite));
+    node.put(columnName, moneyValue);
   }
 
   private void putHstoreAsJson(final ObjectNode node, final String columnName, final ResultSet resultSet, final int index)

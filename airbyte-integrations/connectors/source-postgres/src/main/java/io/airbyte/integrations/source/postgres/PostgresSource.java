@@ -217,6 +217,8 @@ public class PostgresSource extends AbstractJdbcSource<PostgresType> implements 
       catalog.setStreams(streams);
     }
 
+    // We can *potentially* upgrade here. However, this will be an issue since we will likely incur data loss
+    // return AirbyteMessageMigrationV1.upgrade(catalog);
     return catalog;
   }
 

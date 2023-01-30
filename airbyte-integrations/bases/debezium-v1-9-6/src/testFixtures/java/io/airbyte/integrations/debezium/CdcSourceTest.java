@@ -53,6 +53,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// TODO (akashkulk) : Add a protcol version method to acceptance tests
 public abstract class CdcSourceTest {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(CdcSourceTest.class);
@@ -93,9 +94,9 @@ public abstract class CdcSourceTest {
       CatalogHelpers.createAirbyteStream(
           MODELS_STREAM_NAME,
           MODELS_SCHEMA,
-          Field.of(COL_ID, JsonSchemaType.INTEGER),
-          Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER),
-          Field.of(COL_MODEL, JsonSchemaType.STRING))
+          Field.of(COL_ID, JsonSchemaType.INTEGER_V1),
+          Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER_V1),
+          Field.of(COL_MODEL, JsonSchemaType.STRING_V1))
           .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))
           .withSourceDefinedPrimaryKey(List.of(List.of(COL_ID)))));
   protected static final ConfiguredAirbyteCatalog CONFIGURED_CATALOG = CatalogHelpers
@@ -241,7 +242,7 @@ public abstract class CdcSourceTest {
     final Map<String, List<AirbyteRecordMessage>> recordsPerStream = new HashMap<>();
     for (final AirbyteMessage message : messages) {
       if (message.getType() == Type.RECORD) {
-        AirbyteRecordMessage recordMessage = message.getRecord();
+        final AirbyteRecordMessage recordMessage = message.getRecord();
         recordsPerStream.computeIfAbsent(recordMessage.getStream(), (c) -> new ArrayList<>()).add(recordMessage);
       }
     }
@@ -461,12 +462,12 @@ public abstract class CdcSourceTest {
     final ConfiguredAirbyteCatalog configuredCatalog = Jsons.clone(CONFIGURED_CATALOG);
 
     final List<JsonNode> MODEL_RECORDS_2 = ImmutableList.of(
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 110, COL_MAKE_ID, 1, COL_MODEL, "Fiesta-2")),
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 120, COL_MAKE_ID, 1, COL_MODEL, "Focus-2")),
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 130, COL_MAKE_ID, 1, COL_MODEL, "Ranger-2")),
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 140, COL_MAKE_ID, 2, COL_MODEL, "GLA-2")),
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 150, COL_MAKE_ID, 2, COL_MODEL, "A 220-2")),
-        Jsons.jsonNode(ImmutableMap.of(COL_ID, 160, COL_MAKE_ID, 2, COL_MODEL, "E 350-2")));
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "110", COL_MAKE_ID, "1", COL_MODEL, "Fiesta-2")),
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "120", COL_MAKE_ID, "1", COL_MODEL, "Focus-2")),
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "130", COL_MAKE_ID, "1", COL_MODEL, "Ranger-2")),
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "140", COL_MAKE_ID, "2", COL_MODEL, "GLA-2")),
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "150", COL_MAKE_ID, "2", COL_MODEL, "A 220-2")),
+        Jsons.jsonNode(ImmutableMap.of(COL_ID, "160", COL_MAKE_ID, "2", COL_MODEL, "E 350-2")));
 
     createTable(MODELS_SCHEMA, MODELS_STREAM_NAME + "_2",
         columnClause(ImmutableMap.of(COL_ID, "INTEGER", COL_MAKE_ID, "INTEGER", COL_MODEL, "VARCHAR(200)"), Optional.of(COL_ID)));
@@ -480,9 +481,9 @@ public abstract class CdcSourceTest {
         .withStream(CatalogHelpers.createAirbyteStream(
             MODELS_STREAM_NAME + "_2",
             MODELS_SCHEMA,
-            Field.of(COL_ID, JsonSchemaType.INTEGER),
-            Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER),
-            Field.of(COL_MODEL, JsonSchemaType.STRING))
+            Field.of(COL_ID, JsonSchemaType.INTEGER_V1),
+            Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER_V1),
+            Field.of(COL_MODEL, JsonSchemaType.STRING_V1))
             .withSupportedSyncModes(
                 Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))
             .withSourceDefinedPrimaryKey(List.of(List.of(COL_ID))));
@@ -623,9 +624,9 @@ public abstract class CdcSourceTest {
             CatalogHelpers.createAirbyteStream(
                 MODELS_STREAM_NAME + "_random",
                 randomTableSchema(),
-                Field.of(COL_ID + "_random", JsonSchemaType.NUMBER),
-                Field.of(COL_MAKE_ID + "_random", JsonSchemaType.NUMBER),
-                Field.of(COL_MODEL + "_random", JsonSchemaType.STRING))
+                Field.of(COL_ID + "_random", JsonSchemaType.NUMBER_V1),
+                Field.of(COL_MAKE_ID + "_random", JsonSchemaType.NUMBER_V1),
+                Field.of(COL_MODEL + "_random", JsonSchemaType.STRING_V1))
                 .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))
                 .withSourceDefinedPrimaryKey(List.of(List.of(COL_ID + "_random"))))));
 
@@ -780,9 +781,9 @@ public abstract class CdcSourceTest {
     final AirbyteStream streamWithoutPK = CatalogHelpers.createAirbyteStream(
         MODELS_STREAM_NAME + "_2",
         MODELS_SCHEMA,
-        Field.of(COL_ID, JsonSchemaType.INTEGER),
-        Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER),
-        Field.of(COL_MODEL, JsonSchemaType.STRING));
+        Field.of(COL_ID, JsonSchemaType.INTEGER_V1),
+        Field.of(COL_MAKE_ID, JsonSchemaType.INTEGER_V1),
+        Field.of(COL_MODEL, JsonSchemaType.STRING_V1));
     streamWithoutPK.setSourceDefinedPrimaryKey(Collections.emptyList());
     streamWithoutPK.setSupportedSyncModes(List.of(SyncMode.FULL_REFRESH));
     addCdcMetadataColumns(streamWithoutPK);
@@ -790,9 +791,9 @@ public abstract class CdcSourceTest {
     final AirbyteStream randomStream = CatalogHelpers.createAirbyteStream(
         MODELS_STREAM_NAME + "_random",
         randomTableSchema(),
-        Field.of(COL_ID + "_random", JsonSchemaType.INTEGER),
-        Field.of(COL_MAKE_ID + "_random", JsonSchemaType.INTEGER),
-        Field.of(COL_MODEL + "_random", JsonSchemaType.STRING))
+        Field.of(COL_ID + "_random", JsonSchemaType.INTEGER_V1),
+        Field.of(COL_MAKE_ID + "_random", JsonSchemaType.INTEGER_V1),
+        Field.of(COL_MODEL + "_random", JsonSchemaType.STRING_V1))
         .withSourceDefinedCursor(true)
         .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))
         .withSourceDefinedPrimaryKey(List.of(List.of(COL_ID + "_random")));
