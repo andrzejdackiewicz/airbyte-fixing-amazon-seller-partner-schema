@@ -158,6 +158,8 @@ services:
       - GITHUB_STORE_BRANCH=${GITHUB_STORE_BRANCH}
       - MICRONAUT_ENVIRONMENTS=${WORKERS_MICRONAUT_ENVIRONMENTS}
       - AUTO_DETECT_SCHEMA=${AUTO_DETECT_SCHEMA}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:4317
+      - OTEL_TRACES_EXPORTER=otlp
     ports:
       - "8001"
     configs:
@@ -168,6 +170,9 @@ services:
       - ${LOCAL_ROOT}:${LOCAL_ROOT}
     networks:
       - airbyte_internal
+      - airbyte_public
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       bootloader:
         condition: service_completed_successfully
