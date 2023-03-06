@@ -1,0 +1,143 @@
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Actions 🤘
+on: [push]
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: check out repository code
+        uses: actions/checkout@v3
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - run: echo "🍏 This job's status is ${{ job.status }}."
+  uuid:
+    name: "Custom UUID of workflow run"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: UUID ${{ github.event.inputs.uuid }}
+        run: true
+  start-test-runner:
+    name: Start Build EC2 Runner
+    needs: uuid
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Checkout Airbyte
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.inputs.repo }}
+          ref: ${{ github.event.inputs.gitref }}
+      - name: Check PAT rate limits
+        run: |
+          ./tools/bin/find_non_rate_limited_PAT \
+            ${{ secrets.GH_PAT_BUILD_RUNNER_OSS }} \
+            ${{ secrets.GH_PAT_BUILD_RUNNER_BACKUP }}
+      - name: Start AWS Runner
+        id: start-ec2-runner
+        uses: ./.github/actions/start-aws-runner
+        with:
+          aws-access-key-id: ${{ secrets.SELF_RUNNER_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SELF_RUNNER_AWS_SECRET_ACCESS_KEY }}
+          github-token: ${{ env.PAT }}
+  integration-test:
+    timeout-minutes: 240
+    needs: start-test-runner
+    runs-on: ${{ needs.start-test-runner.outputs.label }}
+    steps:
+      - run: echo "🎯 Test goes here."
+      - name: Link comment to workflow run
+        if: github.event.inputs.comment-id
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          comment-id: ${{ github.event.inputs.comment-id }}
+          body: |
+            > :clock2: ${{github.event.inputs.connector}} https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}
+      - name: Search for valid connector name format
+        id: regex
+        uses: AsasInnab/regex-action@v1
+        with:
+          regex_pattern: "^((connectors|bases)/)?[a-zA-Z0-9-_]+$"
+          regex_flags: "i" # required to be set for this plugin
+          search_string: 'connectors/source-postgres' # ${{ github.event.inputs.connector }}
+      - name: Validate input workflow format
+        if: steps.regex.outputs.first_match != 'connectors/source-postgres' # github.event.inputs.connector
+        run: echo "The connector provided has an invalid format!" && exit 1
+      - name: Checkout Airbyte
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.inputs.repo }}
+          ref: ${{ github.event.inputs.gitref }}
+      - name: Install Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "17"
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: Install CI scripts
+        # all CI python packages have the prefix "ci_"
+        run: |
+          pip install --quiet -e ./tools/ci_*
+      - name: KIND Kubernetes Cluster Setup
+        uses: helm/kind-action@v1.4.0
+        env:
+          USER: root
+          HOME: /home/runner
+      - name: Create harness pod
+        shell: bash
+        run: |
+          echo "pulling image..."
+          docker pull airbyte/source-postgres:latest
+          echo "Loading images into KIND..."
+          kind load docker-image airbyte/source-postgres:latest --name chart-testing
+          echo "loading pod..."
+          kubectl create -f ./tools/bin/test-postgres-source-process.yaml
+          echo "get pods..."
+          kubectl get po
+        env:
+          USER: root
+          HOME: /home/runner
+
+  # In case of self-hosted EC2 errors, remove this block.
+  stop-test-runner:
+    name: Stop Build EC2 Runner
+    timeout-minutes: 10
+    needs:
+      - start-test-runner # required to get output from the start-runner job
+      - integration-test # required to wait when the main job is done
+      - uuid
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.SELF_RUNNER_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SELF_RUNNER_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Checkout Airbyte
+        uses: actions/checkout@v3
+      - name: Check PAT rate limits
+        run: |
+          ./tools/bin/find_non_rate_limited_PAT \
+            ${{ secrets.GH_PAT_BUILD_RUNNER_OSS }} \
+            ${{ secrets.GH_PAT_BUILD_RUNNER_BACKUP }}
+      - name: Stop EC2 runner
+        uses: supertopher/ec2-github-runner@base64v1.0.10
+        with:
+          mode: stop
+          github-token: ${{ env.PAT }}
+          label: ${{ needs.start-test-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-test-runner.outputs.ec2-instance-id }}
