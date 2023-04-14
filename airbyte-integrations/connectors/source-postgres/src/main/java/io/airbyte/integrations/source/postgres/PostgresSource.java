@@ -235,25 +235,6 @@ public class PostgresSource extends AbstractJdbcSource<PostgresType> implements 
     return discoverRawTables(database);
   }
 
-  public List<TableInfo<CommonField<PostgresType>>> discoverRawTables(final JdbcDatabase database) throws Exception {
-    if (schemas != null && !schemas.isEmpty()) {
-      // process explicitly selected (from UI) schemas
-      final List<TableInfo<CommonField<PostgresType>>> internals = new ArrayList<>();
-      for (final String schema : schemas) {
-        LOGGER.info("Checking schema: {}", schema);
-        final List<TableInfo<CommonField<PostgresType>>> tables = super.discoverInternal(database, schema);
-        internals.addAll(tables);
-        for (final TableInfo<CommonField<PostgresType>> table : tables) {
-          LOGGER.info("Found table: {}.{}", table.getNameSpace(), table.getName());
-        }
-      }
-      return internals;
-    } else {
-      LOGGER.info("No schemas explicitly set on UI to process, so will process all of existing schemas in DB");
-      return super.discoverInternal(database);
-    }
-  }
-
   @VisibleForTesting
   List<JsonNode> getReplicationSlot(final JdbcDatabase database, final JsonNode config) {
     try {
@@ -447,11 +428,6 @@ public class PostgresSource extends AbstractJdbcSource<PostgresType> implements 
     }
 
     return username;
-  }
-
-  @Override
-  protected boolean isNotInternalSchema(final JsonNode jsonNode, final Set<String> internalSchemas) {
-    return false;
   }
 
   @Override

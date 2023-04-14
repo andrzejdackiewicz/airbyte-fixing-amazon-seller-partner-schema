@@ -19,7 +19,6 @@ import io.airbyte.commons.util.AutoCloseableIterator;
 import io.airbyte.commons.util.AutoCloseableIterators;
 import io.airbyte.db.AbstractDatabase;
 import io.airbyte.db.IncrementalUtils;
-import io.airbyte.db.jdbc.JdbcDatabase;
 import io.airbyte.integrations.BaseConnector;
 import io.airbyte.integrations.base.AirbyteTraceMessageUtility;
 import io.airbyte.integrations.base.Source;
@@ -264,7 +263,9 @@ public abstract class AbstractDbSource<DataType, Database extends AbstractDataba
                                                                              final Database database)
       throws Exception {
     final Set<String> systemNameSpaces = getExcludedInternalNameSpaces();
+    LOGGER.info("System namespaces(schemas) to exclude: {}", systemNameSpaces);
     final Set<String> systemViews = getExcludedViews();
+    LOGGER.info("System views to exclude: {}", systemViews);
     final List<TableInfo<CommonField<DataType>>> discoveredTables = discoverInternal(database);
     return (systemNameSpaces == null || systemNameSpaces.isEmpty() ? discoveredTables
         : discoveredTables.stream()
@@ -511,20 +512,6 @@ public abstract class AbstractDbSource<DataType, Database extends AbstractDataba
             .withNamespace(namespace)
             .withEmittedAt(emittedAt)
             .withData(r)));
-  }
-
-  /**
-   * @param database - The database where from privileges for tables will be consumed
-   * @param schema - The schema where from privileges for tables will be consumed
-   * @return Set with privileges for tables for current DB-session user The method is responsible for
-   *         SELECT-ing the table with privileges. In some cases such SELECT doesn't require (e.g. in
-   *         Oracle DB - the schema is the user, you cannot REVOKE a privilege on a table from its
-   *         owner).
-   */
-  protected <T> Set<T> getPrivilegesTableForCurrentUser(final JdbcDatabase database,
-                                                        final String schema)
-      throws SQLException {
-    return Collections.emptySet();
   }
 
   /**

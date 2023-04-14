@@ -82,7 +82,6 @@ public class MssqlSource extends AbstractJdbcSource<JDBCType> implements Source 
   public static final String CDC_EVENT_SERIAL_NO = "_ab_cdc_event_serial_no";
   private static final String HIERARCHYID = "hierarchyid";
   private static final int INTERMEDIATE_STATE_EMISSION_FREQUENCY = 10_000;
-  private List<String> schemas;
 
   public static Source sshWrappedSource() {
     return new SshWrappedSource(new MssqlSource(), JdbcUtils.HOST_LIST_KEY, JdbcUtils.PORT_LIST_KEY);
@@ -244,25 +243,6 @@ public class MssqlSource extends AbstractJdbcSource<JDBCType> implements Source 
     }
 
     return catalog;
-  }
-
-  @Override
-  public List<TableInfo<CommonField<JDBCType>>> discoverInternal(final JdbcDatabase database) throws Exception {
-    final List<TableInfo<CommonField<JDBCType>>> internals = super.discoverInternal(database);
-    if (schemas != null && !schemas.isEmpty()) {
-      // process explicitly filtered (from UI) schemas
-      final List<TableInfo<CommonField<JDBCType>>> resultInternals = internals
-          .stream()
-          .filter(this::isTableInRequestedSchema)
-          .toList();
-      for (final TableInfo<CommonField<JDBCType>> info : resultInternals) {
-        LOGGER.debug("Found table (schema: {}): {}", info.getNameSpace(), info.getName());
-      }
-      return resultInternals;
-    } else {
-      LOGGER.info("No schemas explicitly set on UI to process, so will process all of existing schemas in DB");
-      return internals;
-    }
   }
 
   @Override

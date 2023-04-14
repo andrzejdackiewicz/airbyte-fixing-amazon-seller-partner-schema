@@ -88,6 +88,8 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
   protected final Supplier<JdbcStreamingQueryConfig> streamingQueryConfigProvider;
   protected final JdbcCompatibleSourceOperations<Datatype> sourceOperations;
 
+  protected List<String> schemas;
+
   protected String quoteString;
   protected Collection<DataSource> dataSources = new ArrayList<>();
 
@@ -156,8 +158,6 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
 
   @Override
   protected List<TableInfo<CommonField<Datatype>>> discoverInternal(final JdbcDatabase database, final String schema) throws Exception {
-    final Set<String> internalSchemas = new HashSet<>(getExcludedInternalNameSpaces());
-    LOGGER.info("Internal schemas to exclude: {}", internalSchemas);
     final Set<JdbcPrivilegeDto> tablesWithSelectGrantPrivilege = getPrivilegesTableForCurrentUser(database, schema);
     return database.bufferedResultSetQuery(
         // retrieve column metadata from the database
@@ -165,7 +165,8 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
         // store essential column metadata to a Json object from the result set about each column
         this::getColumnMetadata)
         .stream()
-        .filter(excludeNotAccessibleTables(internalSchemas, tablesWithSelectGrantPrivilege))
+        // exclude tables that for which Airbyte does not have SELECT access
+        .filter(excludeNotAccessibleTables(tablesWithSelectGrantPrivilege))
         // group by schema and table name to handle the case where a table with the same name exists in
         // multiple schemas.
         .collect(Collectors.groupingBy(t -> ImmutablePair.of(t.get(INTERNAL_SCHEMA_NAME).asText(), t.get(INTERNAL_TABLE_NAME).asText())))
@@ -201,24 +202,27 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
         .collect(Collectors.toList());
   }
 
-  protected Predicate<JsonNode> excludeNotAccessibleTables(final Set<String> internalSchemas,
-                                                           final Set<JdbcPrivilegeDto> tablesWithSelectGrantPrivilege) {
+  protected Predicate<JsonNode> excludeNotAccessibleTables(final Set<JdbcPrivilegeDto> tablesWithSelectGrantPrivilege) {
     return jsonNode -> {
-      if (tablesWithSelectGrantPrivilege.isEmpty()) {
-        return isNotInternalSchema(jsonNode, internalSchemas);
-      }
       return tablesWithSelectGrantPrivilege.stream()
           .anyMatch(e -> e.getSchemaName().equals(jsonNode.get(INTERNAL_SCHEMA_NAME).asText()))
           && tablesWithSelectGrantPrivilege.stream()
-              .anyMatch(e -> e.getTableName().equals(jsonNode.get(INTERNAL_TABLE_NAME).asText()))
-          && !internalSchemas.contains(jsonNode.get(INTERNAL_SCHEMA_NAME).asText());
+              .anyMatch(e -> e.getTableName().equals(jsonNode.get(INTERNAL_TABLE_NAME).asText()));
     };
   }
 
-  // needs to override isNotInternalSchema for connectors that override
-  // getPrivilegesTableForCurrentUser()
-  protected boolean isNotInternalSchema(final JsonNode jsonNode, final Set<String> internalSchemas) {
-    return !internalSchemas.contains(jsonNode.get(INTERNAL_SCHEMA_NAME).asText());
+  /**
+   * @param database - The database where from privileges for tables will be consumed
+   * @param schema - The schema where from privileges for tables will be consumed
+   * @return Set with privileges for tables for current DB-session user The method is responsible for
+   *         SELECT-ing the table with privileges. In some cases such SELECT doesn't require (e.g. in
+   *         Oracle DB - the schema is the user, you cannot REVOKE a privilege on a table from its
+   *         owner).
+   */
+  protected <T> Set<T> getPrivilegesTableForCurrentUser(final JdbcDatabase database,
+      final String schema)
+      throws SQLException {
+    return Collections.emptySet();
   }
 
   /**
@@ -243,7 +247,21 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
   @Override
   public List<TableInfo<CommonField<Datatype>>> discoverInternal(final JdbcDatabase database)
       throws Exception {
-    return discoverInternal(database, null);
+    if (schemas == null || schemas.isEmpty()) {
+      LOGGER.info("No schemas explicitly set on UI to process, so will process all of existing schemas in DB");
+      return discoverInternal(database, null);
+    } else {
+      final List<TableInfo<CommonField<Datatype>>> results = new ArrayList<>();
+      for (final String schema : schemas) {
+        LOGGER.info("Checking schema: {}", schema);
+        final List<TableInfo<CommonField<Datatype>>> tables = discoverInternal(database, schema);
+        results.addAll(tables);
+        for (final TableInfo<CommonField<Datatype>> table : tables) {
+          LOGGER.info("Found table: {}.{}", table.getNameSpace(), table.getName());
+        }
+      }
+      return results;
+    }
   }
 
   @Override
