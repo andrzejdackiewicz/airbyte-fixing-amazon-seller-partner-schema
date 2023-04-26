@@ -112,9 +112,9 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
     // This corresponds to the initial sync for in INCREMENTAL_MODE. The ordering of the records matters as intermediate state messages are emitted.
     if (syncMode.equals(SyncMode.INCREMENTAL)) {
       final String quotedCursorField = enquoteIdentifier(cursorField.get(), getQuoteString());
-      return queryTable(database, String.format("SELECT %s FROM %s ORDER BY %s ASC",
+      return queryTable(database, String.format("SELECT %s FROM %s",
           enquoteIdentifierList(columnNames, getQuoteString()),
-          getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString()), quotedCursorField));
+          getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString())));
     } else {
       // If we are in FULL_REFRESH mode, state messages are never emitted, so we don't care about ordering of the records.
       return queryTable(database, String.format("SELECT %s FROM %s",
@@ -442,21 +442,24 @@ public abstract class AbstractJdbcSource<Datatype> extends AbstractDbSource<Data
         database.getMetaData().getDatabaseProductVersion());
 
     for (final ConfiguredAirbyteStream stream : catalog.getStreams()) {
-      final String streamName = stream.getStream().getName();
-      final String schemaName = stream.getStream().getNamespace();
-      final ResultSet indexInfo = database.getMetaData().getIndexInfo(null,
-          schemaName,
-          streamName,
-          false,
-          false);
-      LOGGER.info("Discovering indexes for schema \"{}\", table \"{}\"", schemaName, streamName);
-      while (indexInfo.next()) {
-        LOGGER.info("Index name: {}, Column: {}, Unique: {}",
-            indexInfo.getString(JDBC_INDEX_NAME),
-            indexInfo.getString(JDBC_COLUMN_COLUMN_NAME),
-            !indexInfo.getBoolean(JDBC_INDEX_NON_UNIQUE));
+      if (stream.getSyncMode().equals(SyncMode.INCREMENTAL)) {
+        final String streamName = stream.getStream().getName();
+        final String schemaName = stream.getStream().getNamespace();
+        final String cursorFieldName = stream.getCursorField() != null && stream.getCursorField().size() != 0 ? stream.getCursorField().get(0) : "";
+        final ResultSet indexInfo = database.getMetaData().getIndexInfo(null,
+            schemaName,
+            streamName,
+            false,
+            false);
+        LOGGER.info("Discovering indexes for schema \"{}\", table \"{}\", with cursor field \"{}\"", schemaName, streamName, cursorFieldName);
+        while (indexInfo.next()) {
+          LOGGER.info("Index name: {}, Column: {}, Unique: {}",
+              indexInfo.getString(JDBC_INDEX_NAME),
+              indexInfo.getString(JDBC_COLUMN_COLUMN_NAME),
+              !indexInfo.getBoolean(JDBC_INDEX_NON_UNIQUE));
+        }
+        indexInfo.close();
       }
-      indexInfo.close();
     }
   }
 
