@@ -618,7 +618,7 @@ def test_cursor_granularity_but_no_step():
         )
 
 
-def test_given_multiple_cursor_datetime_format_then_slice_using_first_format():
+def test_given_multiple_cursor_datetime_format_then_slice_using_datetime_format():
     cursor = DatetimeBasedCursor(
         start_datetime=MinMaxDatetime("2021-01-01", parameters={}),
         end_datetime=MinMaxDatetime("2023-01-10", parameters={}),
