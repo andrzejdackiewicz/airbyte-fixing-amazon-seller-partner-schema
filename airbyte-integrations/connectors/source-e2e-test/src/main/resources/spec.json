@@ -31,6 +31,12 @@
             "title" : "Message Interval",
             "description" : "Interval between messages in ms.",
             "type" : "integer"
+          },
+          "log_each_record" : {
+            "title" : "Should log each record",
+            "description" : "If true, will log each record and state.",
+            "type" : "boolean",
+            "default": false
           }
         }
       },
@@ -55,6 +61,12 @@
             "type" : "integer",
             "min" : 1
           }
+        },
+        "log_each_record" : {
+          "title" : "Should log each record",
+          "description" : "If true, will log each record and state.",
+          "type" : "boolean",
+          "default": false
         }
       },
       {
@@ -101,6 +113,13 @@
             "min" : 0,
             "max" : 60000,
             "default" : 0,
+            "order" : 40
+          },
+          "emit_state_every_n": {
+            "title" : "State message interval",
+            "description" : "Optional field to determine how often to emit a state message. If not set, no state will be emitted.",
+            "type" : "integer",
+            "max" : 60000,
             "order" : 40
           },
           "mock_catalog" : {
@@ -216,6 +235,14 @@
                 }
               }
             ]
+          },
+          "stream_count": {
+            "title": "Stream Count",
+            "description": "number of streams to emit",
+            "type": "integer",
+            "min" : 1,
+            "max" : 5000,
+            "default" : 1
           }
         }
       }
