@@ -63,6 +63,12 @@ inputs:
   ci_job_key:
     description: "CI job key"
     required: false
+  pypi_username:
+    description: "PyPI username"
+    required: false
+  pypi_password:
+    description: "PyPI password"
+    required: false
 runs:
   using: "composite"
   steps:
@@ -120,4 +126,6 @@ runs:
         SPEC_CACHE_GCS_CREDENTIALS: ${{ inputs.spec_cache_gcs_credentials }}
         DOCKER_HUB_USERNAME: ${{ inputs.docker_hub_username }}
         DOCKER_HUB_PASSWORD: ${{ inputs.docker_hub_password }}
+        PYPI_USERNAME: ${{ inputs.pypi_username }}
+        PYPI_PASSWORD: ${{ inputs.pypi_password }}
         CI: "True"

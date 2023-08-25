@@ -11,21 +11,20 @@ from typing import List, Set, Tuple
 
 import anyio
 import click
-from connector_ops.utils import ConnectorLanguage, console, get_all_connectors_in_repo, SupportLevelEnum
+from connector_ops.utils import ConnectorLanguage, SupportLevelEnum, console, get_all_connectors_in_repo
 from pipelines import main_logger
 from pipelines.bases import ConnectorWithModifiedFiles
 from pipelines.builds import run_connector_build_pipeline
-from pipelines.contexts import ConnectorContext, ContextState, PublishConnectorContext
+from pipelines.contexts import ConnectorContext, ContextState, PublishConnectorContext, PublishPyPIContext
 from pipelines.format import run_connectors_format_pipelines
 from pipelines.github import update_global_commit_status_check_for_tests
 from pipelines.pipelines.connectors import run_connectors_pipelines
 from pipelines.publish import reorder_contexts, run_connector_publish_pipeline
+from pipelines.publish_pypi import run_connector_pypi_publish_pipeline
 from pipelines.tests import run_connector_test_pipeline
-from pipelines.utils import (
-    DaggerPipelineCommand,
-    get_connector_modified_files,
-    get_modified_connectors,
-)
+from pipelines.utils import DaggerPipelineCommand, get_connector_modified_files, get_modified_connectors
+from rich.table import Table
+from rich.text import Text
 
 # HELPERS
 
@@ -181,10 +180,7 @@ def connectors(
 @click.option(
     "--code-tests-only",
     is_flag=True,
-    help=(
-        "Only execute code tests. "
-        "Metadata checks, QA, and acceptance tests will be skipped."
-    ),
+    help=("Only execute code tests. " "Metadata checks, QA, and acceptance tests will be skipped."),
     default=False,
     type=bool,
 )
@@ -430,6 +426,69 @@ def publish(
         ctx.obj["execute_timeout"],
     )
     return all(context.state is ContextState.SUCCESSFUL for context in publish_connector_contexts)
+
+
+@connectors.command(cls=DaggerPipelineCommand, help="Publish selected connectors to PyPI.")
+@click.option(
+    "--pypi-username",
+    help="Your username to connect to PyPI.",
+    type=click.STRING,
+    required=True,
+    envvar="PYPI_USERNAME",
+)
+@click.option(
+    "--pypi-password",
+    help="Your password to connect to PyPI.",
+    type=click.STRING,
+    required=True,
+    envvar="PYPI_PASSWORD",
+)
+@click.option(
+    "--pypi-repository",
+    help="The PyPI repository to publish to (pypi, test-pypi).",
+    type=click.Choice(["pypi", "testpypi"]),
+    default="pypi",
+)
+@click.pass_context
+def publish_pypi(
+    ctx: click.Context,
+    pypi_username: str,
+    pypi_password: str,
+    pypi_repository: str,
+):
+    connectors_contexts = [
+        PublishPyPIContext(
+            connector=connector,
+            is_local=ctx.obj["is_local"],
+            git_branch=ctx.obj["git_branch"],
+            git_revision=ctx.obj["git_revision"],
+            ci_report_bucket=ctx.obj["ci_report_bucket_name"],
+            report_output_prefix=ctx.obj["report_output_prefix"],
+            gha_workflow_run_url=ctx.obj.get("gha_workflow_run_url"),
+            dagger_logs_url=ctx.obj.get("dagger_logs_url"),
+            pipeline_start_timestamp=ctx.obj.get("pipeline_start_timestamp"),
+            ci_context=ctx.obj.get("ci_context"),
+            ci_gcs_credentials=ctx.obj["ci_gcs_credentials"],
+            pypi_username=pypi_username,
+            pypi_password=pypi_password,
+            pypi_repository=pypi_repository,
+        )
+        for connector in ctx.obj["selected_connectors_with_modified_files"]
+    ]
+
+    main_logger.warn("Concurrency is forced to 1. For stability reasons we disable parallel PyPI publish pipelines.")
+    ctx.obj["concurrency"] = 1
+
+    connectors_contexts = anyio.run(
+        run_connectors_pipelines,
+        connectors_contexts,
+        run_connector_pypi_publish_pipeline,
+        "Publishing connectors to PyPI",
+        ctx.obj["concurrency"],
+        ctx.obj["dagger_logs_path"],
+        ctx.obj["execute_timeout"],
+    )
+    return all(context.state is ContextState.SUCCESSFUL for context in connectors_contexts)
 
 
 @connectors.command(cls=DaggerPipelineCommand, help="List all selected connectors.")
