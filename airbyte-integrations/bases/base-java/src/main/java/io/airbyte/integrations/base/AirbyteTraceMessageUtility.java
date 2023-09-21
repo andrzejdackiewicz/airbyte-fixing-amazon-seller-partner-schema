@@ -4,6 +4,7 @@
 
 package io.airbyte.integrations.base;
 
+import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.stream.AirbyteStreamStatusHolder;
 import io.airbyte.protocol.models.v0.AirbyteErrorTraceMessage;
 import io.airbyte.protocol.models.v0.AirbyteErrorTraceMessage.FailureType;
@@ -11,14 +12,18 @@ import io.airbyte.protocol.models.v0.AirbyteEstimateTraceMessage;
 import io.airbyte.protocol.models.v0.AirbyteMessage;
 import io.airbyte.protocol.models.v0.AirbyteMessage.Type;
 import io.airbyte.protocol.models.v0.AirbyteTraceMessage;
-import java.util.function.Consumer;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class AirbyteTraceMessageUtility {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(AirbyteTraceMessageUtility.class);
 
   private AirbyteTraceMessageUtility() {}
 
   public static void emitSystemErrorTrace(final Throwable e, final String displayMessage) {
+    LOGGER.info("Emitting error trace...");
     emitErrorTrace(e, displayMessage, FailureType.SYSTEM_ERROR);
   }
 
@@ -57,10 +62,10 @@ public final class AirbyteTraceMessageUtility {
   // public void emitMetricTrace() {}
 
   private static void emitMessage(final AirbyteMessage message) {
-    // Not sure why defaultOutputRecordCollector is under Destination specifically,
-    // but this matches usage elsewhere in base-java
-    final Consumer<AirbyteMessage> outputRecordCollector = Destination::defaultOutputRecordCollector;
-    outputRecordCollector.accept(message);
+    // Explicitly use System.out.println here instead of the OutputRecordConsumer
+    // This is to avoid having multiple PrintWriter instances pointing at the standard out file
+    // descriptor
+    System.out.println(Jsons.serialize(message));
   }
 
   private static AirbyteMessage makeErrorTraceAirbyteMessage(
