@@ -95,8 +95,9 @@ public class BufferManager {
     for (final var entry : buffers.entrySet()) {
       final var queue = entry.getValue();
       queueInfo.append(
-          String.format("  Queue name: %s, num records: %d, num bytes: %s",
-              entry.getKey().getName(), queue.size(), AirbyteFileUtils.byteCountToDisplaySize(queue.getCurrentMemoryUsage())))
+          String.format("  Queue name: %s, num records: %d, num bytes: %s, last msg time: %s",
+              entry.getKey().getName(), queue.size(), AirbyteFileUtils.byteCountToDisplaySize(queue.getCurrentMemoryUsage()),
+              queue.getTimeOfLastMessage()))
           .append(System.lineSeparator());
     }
 
