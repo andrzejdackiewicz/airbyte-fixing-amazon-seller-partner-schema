@@ -16,7 +16,7 @@ dependencies {
     implementation project(':airbyte-integrations:connectors:source-relational-db')
     implementation libs.airbyte.protocol
 
-    implementation 'com.clickhouse:clickhouse-jdbc:0.3.2-patch10:all'
+    implementation 'com.clickhouse:clickhouse-jdbc:0.4.2'
 
     integrationTestJavaImplementation project(':airbyte-integrations:bases:standard-source-test')
     integrationTestJavaImplementation project(':airbyte-integrations:connectors:source-clickhouse')
