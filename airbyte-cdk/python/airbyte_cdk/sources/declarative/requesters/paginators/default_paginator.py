@@ -1,8 +1,8 @@
 #
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 #
-
-from dataclasses import InitVar, dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, List, Mapping, Optional, Union
 
 import requests
@@ -17,9 +17,10 @@ from airbyte_cdk.sources.declarative.types import Config, Record, StreamSlice, S
 
 
 @dataclass
-class DefaultPaginator(Paginator):
+class DefaultPaginator(Paginator, ABC):
     """
-    Default paginator to request pages of results with a fixed size until the pagination strategy no longer returns a next_page_token
+    Abstract default paginator to request pages of results with a fixed size until the pagination strategy
+    no longer returns a next_page_token
 
     Examples:
         1.
@@ -81,24 +82,17 @@ class DefaultPaginator(Paginator):
         page_size_option (Optional[RequestOption]): the request option to set the page size. Cannot be injected in the path.
         page_token_option (Optional[RequestPath, RequestOption]): the request option to set the page token
         pagination_strategy (PaginationStrategy): Strategy defining how to get the next page token
-        config (Config): connection config
-        url_base (Union[InterpolatedString, str]): endpoint's base url
         decoder (Decoder): decoder to decode the response
     """
 
     pagination_strategy: PaginationStrategy
-    config: Config
-    url_base: Union[InterpolatedString, str]
-    parameters: InitVar[Mapping[str, Any]]
     decoder: Decoder = JsonDecoder(parameters={})
     page_size_option: Optional[RequestOption] = None
     page_token_option: Optional[Union[RequestPath, RequestOption]] = None
 
-    def __post_init__(self, parameters: Mapping[str, Any]):
+    def __post_init__(self) -> None:
         if self.page_size_option and not self.pagination_strategy.get_page_size():
             raise ValueError("page_size_option cannot be set if the pagination strategy does not have a page_size")
-        if isinstance(self.url_base, str):
-            self.url_base = InterpolatedString(string=self.url_base, parameters=parameters)
         self._token = self.pagination_strategy.initial_token
 
     def next_page_token(self, response: requests.Response, last_records: List[Record]) -> Optional[Mapping[str, Any]]:
@@ -108,14 +102,13 @@ class DefaultPaginator(Paginator):
         else:
             return None
 
-    def path(self):
-        if self._token and self.page_token_option and isinstance(self.page_token_option, RequestPath):
-            # Replace url base to only return the path
-            return str(self._token).replace(self.url_base.eval(self.config), "")
-        else:
-            return None
+    @abstractmethod
+    def path(self) -> Optional[str]:
+        """
+        Returns the value of the path used in the next request
+        """
 
-    def get_request_params(
+    def get_request_params(  # type: ignore[override]
         self,
         *,
         stream_state: Optional[StreamState] = None,
@@ -151,7 +144,7 @@ class DefaultPaginator(Paginator):
     ) -> Mapping[str, Any]:
         return self._get_request_options(RequestOptionType.body_json)
 
-    def reset(self):
+    def reset(self) -> None:
         self.pagination_strategy.reset()
         self._token = None
 
@@ -170,6 +163,46 @@ class DefaultPaginator(Paginator):
         return options
 
 
+class LowCodePaginator(DefaultPaginator):
+    """
+    Low code default paginator using Interpolated objects to request pages of results with a fixed size until the pagination strategy no
+    longer returns a next_page_token
+
+    Attributes:
+        page_size_option (Optional[RequestOption]): the request option to set the page size. Cannot be injected in the path.
+        page_token_option (Optional[RequestPath, RequestOption]): the request option to set the page token
+        pagination_strategy (PaginationStrategy): Strategy defining how to get the next page token
+        config (Config): connection config
+        url_base (Union[InterpolatedString, str]): endpoint's base url
+        decoder (Decoder): decoder to decode the response
+    """
+
+    def __init__(
+        self,
+        pagination_strategy: PaginationStrategy,
+        config: Config,
+        url_base: Union[InterpolatedString, str],
+        parameters: Mapping[str, Any],
+        decoder: Decoder = JsonDecoder(parameters={}),
+        page_size_option: Optional[RequestOption] = None,
+        page_token_option: Optional[Union[RequestPath, RequestOption]] = None,
+    ):
+        if isinstance(url_base, str):
+            self.url_base = InterpolatedString(string=url_base, parameters=parameters)
+        self.config = config
+
+        super().__init__(
+            pagination_strategy=pagination_strategy, decoder=decoder, page_size_option=page_size_option, page_token_option=page_token_option
+        )
+
+    def path(self) -> Optional[str]:
+        if self._token and self.page_token_option and isinstance(self.page_token_option, RequestPath):
+            # Replace url base to only return the path
+            return str(self._token).replace(self.url_base.eval(self.config), "")
+        else:
+            return None
+
+
 class PaginatorTestReadDecorator(Paginator):
     """
     In some cases, we want to limit the number of requests that are made to the backend source. This class allows for limiting the number of
@@ -178,7 +211,7 @@ class PaginatorTestReadDecorator(Paginator):
 
     _PAGE_COUNT_BEFORE_FIRST_NEXT_CALL = 1
 
-    def __init__(self, decorated, maximum_number_of_pages: int = 5):
+    def __init__(self, decorated: DefaultPaginator, maximum_number_of_pages: int = 5):
         if maximum_number_of_pages and maximum_number_of_pages < 1:
             raise ValueError(f"The maximum number of pages on a test read needs to be strictly positive. Got {maximum_number_of_pages}")
         self._maximum_number_of_pages = maximum_number_of_pages
@@ -192,10 +225,10 @@ class PaginatorTestReadDecorator(Paginator):
         self._page_count += 1
         return self._decorated.next_page_token(response, last_records)
 
-    def path(self):
+    def path(self) -> Optional[str]:
         return self._decorated.path()
 
-    def get_request_params(
+    def get_request_params(  # type: ignore[override]
         self,
         *,
         stream_state: Optional[StreamState] = None,
@@ -231,6 +264,6 @@ class PaginatorTestReadDecorator(Paginator):
     ) -> Mapping[str, Any]:
         return self._decorated.get_request_body_json(stream_state=stream_state, stream_slice=stream_slice, next_page_token=next_page_token)
 
-    def reset(self):
+    def reset(self) -> None:
         self._decorated.reset()
         self._page_count = self._PAGE_COUNT_BEFORE_FIRST_NEXT_CALL
