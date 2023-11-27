@@ -46,6 +46,8 @@ import com.mysql.cj.jdbc.result.ResultSetMetaData;
 import com.mysql.cj.result.Field;
 import io.airbyte.cdk.db.SourceOperations;
 import io.airbyte.cdk.db.jdbc.AbstractJdbcCompatibleSourceOperations;
+import io.airbyte.cdk.db.jdbc.DateTimeConverter;
+import io.airbyte.commons.json.Jsons;
 import io.airbyte.protocol.models.JsonSchemaType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -54,6 +56,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.Collections;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +68,21 @@ public class MySqlSourceOperations extends AbstractJdbcCompatibleSourceOperation
       SMALLINT_UNSIGNED, MEDIUMINT, MEDIUMINT_UNSIGNED, INT, INT_UNSIGNED, BIGINT, BIGINT_UNSIGNED,
       FLOAT, FLOAT_UNSIGNED, DOUBLE, DOUBLE_UNSIGNED, DECIMAL, DECIMAL_UNSIGNED, DATE, DATETIME, TIMESTAMP,
       TIME, YEAR, VARCHAR, TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT);
+
+  @Override
+  public JsonNode rowToJson(final ResultSet queryContext) throws SQLException {
+    // the first call communicates with the database, after that the result is cached.
+    final java.sql.ResultSetMetaData metadata = queryContext.getMetaData();
+    final int columnCount = metadata.getColumnCount();
+    final ObjectNode jsonNode = (ObjectNode) Jsons.jsonNode(Collections.emptyMap());
+
+    for (int i = 1; i <= columnCount; i++) {
+      // convert to java types that will convert into reasonable json.
+      copyToJsonField(queryContext, i, jsonNode);
+    }
+
+    return jsonNode;
+  }
 
   /**
    * @param colIndex 1-based column index.
@@ -123,6 +141,18 @@ public class MySqlSourceOperations extends AbstractJdbcCompatibleSourceOperation
       case TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT, JSON, ENUM, SET -> putString(json, columnName, resultSet, colIndex);
       case NULL -> json.set(columnName, NullNode.instance);
       default -> putDefault(json, columnName, resultSet, colIndex);
+    }
+  }
+
+  /**
+   * MySQL handling of time.
+   */
+  @Override
+  protected void putTime(final ObjectNode node, final String columnName, final ResultSet resultSet, final int index) throws SQLException {
+    try {
+      node.put(columnName, DateTimeConverter.convertToTime(this.getObject(resultSet, index, LocalDateTime.class)));
+    } catch (final Exception e) {
+      node.put(columnName, resultSet.getString(index));
     }
   }
 
