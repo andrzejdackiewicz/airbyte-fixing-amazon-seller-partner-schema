@@ -98,7 +98,9 @@ public class PerformanceTest {
     final var allowedHosts = new AllowedHosts().withHosts(List.of("*"));
     final var integrationLauncher =
         new AirbyteIntegrationLauncher("1", 0, this.imageName, processFactory, resourceReqs, allowedHosts, false, new EnvVariableFeatureFlags());
-    final var source = new DefaultAirbyteSource(integrationLauncher, new EnvVariableFeatureFlags(), heartbeatMonitor);
+//     final var source = new DefaultAirbyteSource(integrationLauncher, new EnvVariableFeatureFlags(),
+//     heartbeatMonitor);
+    final var source = new DefaultAirbyteSourceProto(integrationLauncher, new EnvVariableFeatureFlags(), heartbeatMonitor);
     final var jobRoot = "/";
     final WorkerSourceConfig sourceConfig = new WorkerSourceConfig()
         .withSourceConnectionConfiguration(this.config)
@@ -112,16 +114,40 @@ public class PerformanceTest {
     final var start = System.currentTimeMillis();
     log.info("Starting Test");
     while (!source.isFinished()) {
-      final Optional<AirbyteMessage> airbyteMessageOptional = source.attemptRead();
+      // this attempt read needs to return a protobuf message. while needs the
+      // source to also return a protobuf message
+      final Optional<io.airbyte.protocol.protos.AirbyteMessage> airbyteMessageOptional = source.attemptRead();
       if (airbyteMessageOptional.isPresent()) {
-        final AirbyteMessage airbyteMessage = airbyteMessageOptional.get();
-
-        if (airbyteMessage.getRecord() != null) {
-          totalBytes += Jsons.getEstimatedByteSize(airbyteMessage.getRecord().getData());
-          counter++;
+        final io.airbyte.protocol.protos.AirbyteMessage msg = airbyteMessageOptional.get();
+        switch (msg.getMessageCase()) {
+          case RECORD:
+            totalBytes += msg.getRecord().getData().getSerializedSize();
+            counter++;
+            break;
+          case STATE:
+            System.out.println("Received State Message: " + msg.getState().getData());
+            break;
+          case TRACE:
+            System.out.println("Received Trace Message: " + msg.getTrace());
+            break;
+          case CONTROL:
+            System.out.println("Received Control Message: " + msg.getControl().getType());
+            break;
+          default:
+            System.out.println("Received Unknown Message: " + msg.getMessageCase());
         }
 
       }
+
+//      final Optional<AirbyteMessage> airbyteMessageOptional = source.attemptRead();
+//      if (airbyteMessageOptional.isPresent()) {
+//        final AirbyteMessage airbyteMessage = airbyteMessageOptional.get();
+//
+//        if (airbyteMessage.getRecord() != null) {
+//          totalBytes += Jsons.getEstimatedByteSize(airbyteMessage.getRecord().getData());
+//          counter++;
+//        }
+//      }
 
       if (counter > 0 && counter % MEGABYTE == 0) {
         log.info("current throughput: {} total MB {}", (totalBytes / MEGABYTE) / ((System.currentTimeMillis() - start) / 1000.0),

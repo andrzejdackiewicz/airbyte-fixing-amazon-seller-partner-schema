@@ -26,6 +26,7 @@ import io.airbyte.protocol.models.v0.ConfiguredAirbyteCatalog;
 import io.airbyte.validation.json.JsonSchemaValidator;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -81,20 +82,32 @@ public class IntegrationRunner {
   private final Source source;
   private final FeatureFlags featureFlags;
   private static JsonSchemaValidator validator;
+  private final ProtobufSource psource;
+  private final ProtobufDestination pdestination;
 
   public IntegrationRunner(final Destination destination) {
-    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, destination, null);
+    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, destination, null, null, null);
+  }
+
+  public IntegrationRunner(final Destination destination, final ProtobufDestination pdestination) {
+    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, destination, null, pdestination, null);
   }
 
   public IntegrationRunner(final Source source) {
-    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, null, source);
+    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, null, source, null, null);
+  }
+
+  public IntegrationRunner(final Source source, final ProtobufSource psource) {
+    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, null, source, null, psource);
   }
 
   @VisibleForTesting
   IntegrationRunner(final IntegrationCliParser cliParser,
                     final Consumer<AirbyteMessage> outputRecordCollector,
                     final Destination destination,
-                    final Source source) {
+                    final Source source,
+                    final ProtobufDestination pdestination,
+                    final ProtobufSource psource) {
     Preconditions.checkState(destination != null ^ source != null, "can only pass in a destination or a source");
     this.cliParser = cliParser;
     this.outputRecordCollector = outputRecordCollector;
@@ -102,6 +115,8 @@ public class IntegrationRunner {
     integration = source != null ? source : destination;
     this.source = source;
     this.destination = destination;
+    this.psource = psource;
+    this.pdestination = pdestination;
     this.featureFlags = new EnvVariableFeatureFlags();
     validator = new JsonSchemaValidator();
 
@@ -113,8 +128,10 @@ public class IntegrationRunner {
                     final Consumer<AirbyteMessage> outputRecordCollector,
                     final Destination destination,
                     final Source source,
+                    ProtobufDestination pdestination,
+                    final ProtobufSource psource,
                     final JsonSchemaValidator jsonSchemaValidator) {
-    this(cliParser, outputRecordCollector, destination, source);
+    this(cliParser, outputRecordCollector, destination, source, pdestination, psource);
     validator = jsonSchemaValidator;
   }
 
@@ -184,7 +201,11 @@ public class IntegrationRunner {
           final ConfiguredAirbyteCatalog catalog = parseConfig(parsed.getCatalogPath(), ConfiguredAirbyteCatalog.class);
 
           try (final SerializedAirbyteMessageConsumer consumer = destination.getSerializedMessageConsumer(config, catalog, outputRecordCollector)) {
-            consumeWriteStream(consumer);
+            if (pdestination != null) {
+              consumeWriteStream2(consumer);
+            } else {
+              consumeWriteStream(consumer);
+            }
           } finally {
             stopOrphanedThreads(EXIT_HOOK,
                 INTERRUPT_THREAD_DELAY_MINUTES,
@@ -193,6 +214,7 @@ public class IntegrationRunner {
                 TimeUnit.MINUTES);
           }
         }
+
         default -> throw new IllegalStateException("Unexpected value: " + parsed.getCommand());
       }
     } catch (final Exception e) {
@@ -228,6 +250,13 @@ public class IntegrationRunner {
     LOGGER.info("Completed integration: {}", integration.getClass().getName());
   }
 
+  private void produceProtoMessages(final AutoCloseableIterator<io.airbyte.protocol.protos.AirbyteMessage> messageIterator,
+                                    final Consumer<io.airbyte.protocol.protos.AirbyteMessage> recordCollector) {
+    messageIterator.getAirbyteStream().ifPresent(s -> LOGGER.debug("Producing messages for stream {}...", s));
+    messageIterator.forEachRemaining(recordCollector);
+    messageIterator.getAirbyteStream().ifPresent(s -> LOGGER.debug("Finished producing messages for stream {}..."));
+  }
+
   private void produceMessages(final AutoCloseableIterator<AirbyteMessage> messageIterator, final Consumer<AirbyteMessage> recordCollector) {
     messageIterator.getAirbyteStream().ifPresent(s -> LOGGER.debug("Producing messages for stream {}...", s));
     messageIterator.forEachRemaining(recordCollector);
@@ -247,9 +276,7 @@ public class IntegrationRunner {
           partitionSize);
 
       // Submit each stream partition for concurrent execution
-      partitions.forEach(partition -> {
-        streamConsumer.accept(partition);
-      });
+      partitions.forEach(streamConsumer);
 
       // Check for any exceptions that were raised during the concurrent execution
       if (streamConsumer.getException().isPresent()) {
@@ -268,14 +295,26 @@ public class IntegrationRunner {
   }
 
   private void readSerial(final JsonNode config, ConfiguredAirbyteCatalog catalog, final Optional<JsonNode> stateOptional) throws Exception {
-    try (final AutoCloseableIterator<AirbyteMessage> messageIterator = source.read(config, catalog, stateOptional.orElse(null))) {
-      produceMessages(messageIterator, outputRecordCollector);
-    } finally {
-      stopOrphanedThreads(EXIT_HOOK,
-          INTERRUPT_THREAD_DELAY_MINUTES,
-          TimeUnit.MINUTES,
-          EXIT_THREAD_DELAY_MINUTES,
-          TimeUnit.MINUTES);
+    if (psource != null) {
+      try (AutoCloseableIterator<io.airbyte.protocol.protos.AirbyteMessage> it = psource.read(config, catalog, stateOptional.orElse(null))) {
+        produceProtoMessages(it, IntegrationRunner::protobufOutputRecordCollector);
+      } finally {
+        stopOrphanedThreads(EXIT_HOOK,
+            INTERRUPT_THREAD_DELAY_MINUTES,
+            TimeUnit.MINUTES,
+            EXIT_THREAD_DELAY_MINUTES,
+            TimeUnit.MINUTES);
+      }
+    } else {
+      try (final AutoCloseableIterator<AirbyteMessage> messageIterator = source.read(config, catalog, stateOptional.orElse(null))) {
+        produceMessages(messageIterator, outputRecordCollector);
+      } finally {
+        stopOrphanedThreads(EXIT_HOOK,
+            INTERRUPT_THREAD_DELAY_MINUTES,
+            TimeUnit.MINUTES,
+            EXIT_THREAD_DELAY_MINUTES,
+            TimeUnit.MINUTES);
+      }
     }
   }
 
@@ -295,6 +334,47 @@ public class IntegrationRunner {
     try (final BufferedInputStream bis = new BufferedInputStream(System.in);
         final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
       consumeWriteStream(consumer, bis, baos);
+    }
+  }
+
+  @VisibleForTesting
+  static void consumeWriteStream2(final SerializedAirbyteMessageConsumer consumer) throws Exception {
+    try (final BufferedInputStream bis = new BufferedInputStream(System.in);
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+      consumeWriteStream2(consumer, bis, baos);
+    }
+  }
+
+  @VisibleForTesting
+  static void consumeWriteStream2(final SerializedAirbyteMessageConsumer consumer,
+                                  final BufferedInputStream bis,
+                                  final ByteArrayOutputStream baos)
+      throws Exception {
+    consumer.start();
+
+    int byteRead;
+    boolean isLine = false;
+
+    while ((byteRead = bis.read()) != -1) {
+      if (!isLine && byteRead == 0) {
+        io.airbyte.protocol.protos.AirbyteMessage.parseDelimitedFrom(bis);
+      } else {
+        if (byteRead == '\n' || byteRead == '\r') {
+          isLine = false;
+          if (baos.size() > 0) {
+            consumer.accept(baos.toString(StandardCharsets.UTF_8), baos.size());
+            baos.reset();
+          }
+        } else {
+          isLine = true;
+          baos.write(byteRead);
+        }
+      }
+    }
+
+    // Handle last line if there's one
+    if (baos.size() > 0) {
+      consumer.accept(baos.toString(StandardCharsets.UTF_8), baos.size());
     }
   }
 
@@ -420,6 +500,16 @@ public class IntegrationRunner {
 
     final String[] tokens = connectorImage.split(":");
     return tokens[tokens.length - 1];
+  }
+
+  static void protobufOutputRecordCollector(final io.airbyte.protocol.protos.AirbyteMessage message) {
+    try {
+      System.out.writeBytes(new byte[] {0});
+      message.writeDelimitedTo(System.out);
+      System.out.println();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
 }

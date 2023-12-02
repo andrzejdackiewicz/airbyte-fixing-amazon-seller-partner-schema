@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableMap;
 import io.airbyte.cdk.integrations.BaseConnector;
 import io.airbyte.cdk.integrations.base.IntegrationRunner;
+import io.airbyte.cdk.integrations.base.ProtobufSource;
 import io.airbyte.cdk.integrations.base.Source;
 import io.airbyte.commons.util.AutoCloseableIterator;
 import io.airbyte.protocol.models.v0.AirbyteCatalog;
@@ -64,8 +65,14 @@ public class TestingSources extends BaseConnector implements Source {
   }
 
   public static void main(final String[] args) throws Exception {
-    final Source source = new TestingSources();
-    new IntegrationRunner(source).run(args);
+
+    Source source = new SpeedBenchmarkSource();
+    ProtobufSource psource = new ProtobufSpeedBenchmarkSource();
+    new IntegrationRunner(source, psource).run(args);
+
+//     Source source = new SpeedBenchmarkSource();
+//     new IntegrationRunner(source).run(args);
+
   }
 
 }
