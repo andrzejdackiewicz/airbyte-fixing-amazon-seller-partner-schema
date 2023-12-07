@@ -230,7 +230,12 @@ public class IntegrationRunner {
 
   private void produceMessages(final AutoCloseableIterator<AirbyteMessage> messageIterator, final Consumer<AirbyteMessage> recordCollector) {
     messageIterator.getAirbyteStream().ifPresent(s -> LOGGER.debug("Producing messages for stream {}...", s));
-    messageIterator.forEachRemaining(recordCollector);
+
+    try {
+      messageIterator.forEachRemaining(recordCollector);
+    } catch (Exception e) {
+      LOGGER.warn("Exception: {}. This can happen if a database has strict networking settings. Particularly on close.", e.getMessage());
+    }
     messageIterator.getAirbyteStream().ifPresent(s -> LOGGER.debug("Finished producing messages for stream {}..."));
   }
 
@@ -268,8 +273,15 @@ public class IntegrationRunner {
   }
 
   private void readSerial(final JsonNode config, ConfiguredAirbyteCatalog catalog, final Optional<JsonNode> stateOptional) throws Exception {
-    try (final AutoCloseableIterator<AirbyteMessage> messageIterator = source.read(config, catalog, stateOptional.orElse(null))) {
+    final AutoCloseableIterator<AirbyteMessage> messageIterator = source.read(config, catalog, stateOptional.orElse(null));
+    try {
       produceMessages(messageIterator, outputRecordCollector);
+      try {
+        messageIterator.close();
+      } catch (Exception e) {
+        LOGGER.warn("Exception closing connection: {}. This is generally fine as we've moved all data & are terminating everything. ",
+            e.getMessage());
+      }
     } finally {
       stopOrphanedThreads(EXIT_HOOK,
           INTERRUPT_THREAD_DELAY_MINUTES,
