@@ -16,7 +16,6 @@ configurations.all {
 }
 
 
-
 application {
     mainClass = 'io.airbyte.integrations.source.mssql.MssqlSource'
     applicationDefaultJvmArgs = ['-XX:+ExitOnOutOfMemoryError', '-XX:MaxRAMPercentage=75.0']
