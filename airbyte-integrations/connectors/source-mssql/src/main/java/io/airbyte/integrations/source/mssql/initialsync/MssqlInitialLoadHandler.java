@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2023 Airbyte, Inc., all rights reserved.
+ */
+
 package io.airbyte.integrations.source.mssql.initialsync;
 
 import static io.airbyte.cdk.integrations.debezium.DebeziumIteratorConstants.SYNC_CHECKPOINT_DURATION_PROPERTY;
@@ -11,6 +15,7 @@ import io.airbyte.cdk.integrations.source.relationaldb.models.OrderedColumnLoadS
 import io.airbyte.commons.stream.AirbyteStreamUtils;
 import io.airbyte.commons.util.AutoCloseableIterator;
 import io.airbyte.commons.util.AutoCloseableIterators;
+import io.airbyte.integrations.source.mssql.MssqlQueryUtils.TableSizeInfo;
 import io.airbyte.integrations.source.mssql.MssqlSourceOperations;
 import io.airbyte.protocol.models.AirbyteStreamNameNamespacePair;
 import io.airbyte.protocol.models.CommonField;
@@ -30,12 +35,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MssqlInitialLoadHandler {
+
   private static final Logger LOGGER = LoggerFactory.getLogger(MssqlInitialLoadHandler.class);
   private static final long RECORD_LOGGING_SAMPLE_RATE = 1_000_000;
   private final JsonNode config;
@@ -43,27 +48,32 @@ public class MssqlInitialLoadHandler {
   private final MssqlSourceOperations sourceOperations;
   private final String quoteString;
   private final MssqlInitialLoadStateManager initialLoadStateManager;
+  private static final long QUERY_TARGET_SIZE_GB = 1_073_741_824;
   private static final long DEFAULT_CHUNK_SIZE = 1_000_000;
   private final Function<AirbyteStreamNameNamespacePair, JsonNode> streamStateForIncrementalRunSupplier;
+  final Map<AirbyteStreamNameNamespacePair, TableSizeInfo> tableSizeInfoMap;
 
   public MssqlInitialLoadHandler(
-      final JsonNode config,
-      final JdbcDatabase database,
-      final MssqlSourceOperations sourceOperations,
-      final String quoteString,
-      final MssqlInitialLoadStateManager initialLoadStateManager,
-      final Function<AirbyteStreamNameNamespacePair, JsonNode> streamStateForIncrementalRunSupplier) {
+                                 final JsonNode config,
+                                 final JdbcDatabase database,
+                                 final MssqlSourceOperations sourceOperations,
+                                 final String quoteString,
+                                 final MssqlInitialLoadStateManager initialLoadStateManager,
+                                 final Function<AirbyteStreamNameNamespacePair, JsonNode> streamStateForIncrementalRunSupplier,
+                                 final Map<AirbyteStreamNameNamespacePair, TableSizeInfo> tableSizeInfoMap) {
     this.config = config;
     this.database = database;
     this.sourceOperations = sourceOperations;
     this.quoteString = quoteString;
     this.initialLoadStateManager = initialLoadStateManager;
     this.streamStateForIncrementalRunSupplier = streamStateForIncrementalRunSupplier;
+    this.tableSizeInfoMap = tableSizeInfoMap;
   }
+
   public List<AutoCloseableIterator<AirbyteMessage>> getIncrementalIterators(
-      final ConfiguredAirbyteCatalog catalog,
-      final Map<String, TableInfo<CommonField<JDBCType>>> tableNameToTable,
-      final Instant emittedAt) {
+                                                                             final ConfiguredAirbyteCatalog catalog,
+                                                                             final Map<String, TableInfo<CommonField<JDBCType>>> tableNameToTable,
+                                                                             final Instant emittedAt) {
     final List<AutoCloseableIterator<AirbyteMessage>> iteratorList = new ArrayList<>();
     for (final ConfiguredAirbyteStream airbyteStream : catalog.getStreams()) {
       final AirbyteStream stream = airbyteStream.getStream();
@@ -92,7 +102,8 @@ public class MssqlInitialLoadHandler {
         });
 
         final AutoCloseableIterator<JsonNode> queryStream =
-            new MssqlInitialLoadRecordIterator(database, sourceOperations, quoteString, initialLoadStateManager, selectedDatabaseFields, pair, calculateChunkSize(), isCompositePrimaryKey(airbyteStream));
+            new MssqlInitialLoadRecordIterator(database, sourceOperations, quoteString, initialLoadStateManager, selectedDatabaseFields, pair,
+                calculateChunkSize(tableSizeInfoMap.get(pair), pair), isCompositePrimaryKey(airbyteStream));
         final AutoCloseableIterator<AirbyteMessage> recordIterator =
             getRecordIterator(queryStream, streamName, namespace, emittedAt.toEpochMilli());
         final AutoCloseableIterator<AirbyteMessage> recordAndMessageIterator = augmentWithState(recordIterator, pair);
@@ -104,10 +115,10 @@ public class MssqlInitialLoadHandler {
 
   // Transforms the given iterator to create an {@link AirbyteRecordMessage}
   private AutoCloseableIterator<AirbyteMessage> getRecordIterator(
-      final AutoCloseableIterator<JsonNode> recordIterator,
-      final String streamName,
-      final String namespace,
-      final long emittedAt) {
+                                                                  final AutoCloseableIterator<JsonNode> recordIterator,
+                                                                  final String streamName,
+                                                                  final String namespace,
+                                                                  final long emittedAt) {
     return AutoCloseableIterators.transform(recordIterator, r -> new AirbyteMessage()
         .withType(Type.RECORD)
         .withRecord(new AirbyteRecordMessage()
@@ -134,7 +145,7 @@ public class MssqlInitialLoadHandler {
   }
 
   private AutoCloseableIterator<AirbyteMessage> augmentWithState(final AutoCloseableIterator<AirbyteMessage> recordIterator,
-      final AirbyteStreamNameNamespacePair pair) {
+                                                                 final AirbyteStreamNameNamespacePair pair) {
     final OrderedColumnLoadStatus currentOcLoadStatus = initialLoadStateManager.getOrderedColumnLoadStatus(pair);
     final JsonNode incrementalState =
         (currentOcLoadStatus == null || currentOcLoadStatus.getIncrementalState() == null)
@@ -157,7 +168,16 @@ public class MssqlInitialLoadHandler {
     return stream.getStream().getSourceDefinedPrimaryKey().size() > 1;
   }
 
-  public static long calculateChunkSize() {
-    return DEFAULT_CHUNK_SIZE; // TEMP
+  public static long calculateChunkSize(final TableSizeInfo tableSizeInfo, final AirbyteStreamNameNamespacePair pair) {
+    // If table size info could not be calculated, a default chunk size will be provided.
+    if (tableSizeInfo == null || tableSizeInfo.tableSize() == 0 || tableSizeInfo.avgRowLength() == 0) {
+      LOGGER.info("Chunk size could not be determined for pair: {}, defaulting to {} rows", pair, DEFAULT_CHUNK_SIZE);
+      return DEFAULT_CHUNK_SIZE;
+    }
+    final long avgRowLength = tableSizeInfo.avgRowLength();
+    final long chunkSize = QUERY_TARGET_SIZE_GB / avgRowLength;
+    LOGGER.info("Chunk size determined for pair: {}, is {}", pair, chunkSize);
+    return chunkSize;
   }
+
 }
