@@ -4,6 +4,7 @@
 
 package io.airbyte.cdk.integrations.base;
 
+import io.airbyte.cdk.integrations.base.io.OutputRecordCollectorFactory;
 import io.airbyte.commons.stream.AirbyteStreamStatusHolder;
 import io.airbyte.protocol.models.v0.AirbyteErrorTraceMessage;
 import io.airbyte.protocol.models.v0.AirbyteErrorTraceMessage.FailureType;
@@ -66,10 +67,7 @@ public final class AirbyteTraceMessageUtility {
   // public void emitMetricTrace() {}
 
   private static void emitMessage(final AirbyteMessage message) {
-    // Not sure why defaultOutputRecordCollector is under Destination specifically,
-    // but this matches usage elsewhere in base-java
-    final Consumer<AirbyteMessage> outputRecordCollector = Destination::defaultOutputRecordCollector;
-    outputRecordCollector.accept(message);
+    OutputRecordCollectorFactory.getOutputRecordCollector().accept(message);
   }
 
   private static AirbyteMessage makeErrorTraceAirbyteMessage(

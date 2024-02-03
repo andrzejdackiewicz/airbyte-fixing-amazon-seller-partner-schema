@@ -6,6 +6,7 @@ package io.airbyte.cdk.integrations.destination.normalization;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.annotations.VisibleForTesting;
+import io.airbyte.cdk.integrations.base.io.OutputRecordCollectorFactory;
 import io.airbyte.cdk.integrations.destination.normalization.SentryExceptionHelper.ErrorMapKeys;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.protocol.models.AirbyteErrorTraceMessage;
@@ -24,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.apache.logging.log4j.util.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A simple wrapper for base-normalization logs. Reads messages off of stdin and sticks them into
@@ -37,6 +40,8 @@ import org.apache.logging.log4j.util.Strings;
  * process emits any trace messages, they are passed through immediately.
  */
 public class NormalizationLogParser {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(NormalizationLogParser.class);
 
   private final List<String> dbtErrors = new ArrayList<>();
 
@@ -146,8 +151,7 @@ public class NormalizationLogParser {
                   .withMessage("Normalization failed during the dbt run. This may indicate a problem with the data itself.")
                   .withStackTrace("AirbyteDbtError: \n" + dbtErrorStack)
                   .withInternalMessage(internalMessage)));
-      System.out.println(Jsons.serialize(traceMessage));
+      OutputRecordCollectorFactory.getOutputRecordCollector().accept(traceMessage);
     }
   }
-
 }

@@ -9,6 +9,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import datadog.trace.api.Trace;
+import io.airbyte.cdk.integrations.base.io.OutputRecordCollectorFactory;
+import io.airbyte.cdk.integrations.base.io.SocketOutputRecordCollector;
 import io.airbyte.cdk.integrations.util.ApmTraceUtils;
 import io.airbyte.cdk.integrations.util.ConnectorExceptionUtil;
 import io.airbyte.cdk.integrations.util.concurrent.ConcurrentStreamConsumer;
@@ -69,7 +71,6 @@ public class IntegrationRunner {
 
   public static final int INTERRUPT_THREAD_DELAY_MINUTES = 60;
   public static final int EXIT_THREAD_DELAY_MINUTES = 70;
-
   public static final int FORCED_EXIT_CODE = 2;
 
   private static final Runnable EXIT_HOOK = () -> System.exit(FORCED_EXIT_CODE);
@@ -82,12 +83,13 @@ public class IntegrationRunner {
   private final FeatureFlags featureFlags;
   private static JsonSchemaValidator validator;
 
+
   public IntegrationRunner(final Destination destination) {
-    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, destination, null);
+    this(new IntegrationCliParser(), OutputRecordCollectorFactory.getOutputRecordCollector(), destination, null);
   }
 
   public IntegrationRunner(final Source source) {
-    this(new IntegrationCliParser(), Destination::defaultOutputRecordCollector, null, source);
+    this(new IntegrationCliParser(), OutputRecordCollectorFactory.getOutputRecordCollector(), null, source);
   }
 
   @VisibleForTesting
@@ -125,6 +127,10 @@ public class IntegrationRunner {
       runInternal(parsed);
     } catch (final Exception e) {
       throw e;
+    } finally {
+      if (outputRecordCollector instanceof AutoCloseable) {
+        ((AutoCloseable) outputRecordCollector).close();
+      }
     }
   }
 
@@ -263,7 +269,7 @@ public class IntegrationRunner {
       LOGGER.error("Unable to perform concurrent read.", e);
       throw e;
     } finally {
-      stopOrphanedThreads(EXIT_HOOK,
+        stopOrphanedThreads(EXIT_HOOK,
           INTERRUPT_THREAD_DELAY_MINUTES,
           TimeUnit.MINUTES,
           EXIT_THREAD_DELAY_MINUTES,
