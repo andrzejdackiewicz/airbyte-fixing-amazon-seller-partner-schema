@@ -105,6 +105,7 @@ from airbyte_cdk.sources.declarative.requesters.paginators.strategies import (
     PageIncrement,
     StopConditionPaginationStrategyDecorator,
 )
+from airbyte_cdk.sources.declarative.requesters.paginators.strategies.stop_condition import InterpolatedStopCondition
 from airbyte_cdk.sources.declarative.requesters.request_option import RequestOptionType
 from airbyte_cdk.sources.declarative.requesters.request_options import InterpolatedRequestOptionsProvider
 from airbyte_cdk.sources.declarative.requesters.request_path import RequestPath
@@ -317,7 +318,8 @@ class ModelToComponentFactory:
         )
         if model.request_authentication.type == "Bearer":
             return ModelToComponentFactory.create_bearer_authenticator(
-                BearerAuthenticatorModel(type="BearerAuthenticator", api_token=""),
+                # Missing named argument "$parameters" for "BearerAuthenticator"
+                BearerAuthenticatorModel(type="BearerAuthenticator", api_token=""),  # type: ignore[call-arg]
                 config,
                 token_provider=token_provider,  # type: ignore # $parameters defaults to None
             )
@@ -376,7 +378,6 @@ class ModelToComponentFactory:
             cursor_value=model.cursor_value,
             decoder=decoder,
             page_size=model.page_size,
-            stop_condition=model.stop_condition,
             config=config,
             parameters=model.parameters or {},
         )
@@ -665,7 +666,27 @@ class ModelToComponentFactory:
             self._create_component_from_model(model=model.page_token_option, config=config) if model.page_token_option else None
         )
         pagination_strategy = self._create_component_from_model(model=model.pagination_strategy, config=config)
-        if cursor_used_for_stop_condition:
+        if model.stop_condition:
+            pagination_strategy = StopConditionPaginationStrategyDecorator(
+                pagination_strategy,
+                InterpolatedStopCondition(
+                    condition=model.stop_condition,
+                    decoder=decoder,
+                    parameters=model.parameters or {},
+                    config=config,
+                ),
+            )
+        elif isinstance(model.pagination_strategy, CursorPaginationModel) and model.pagination_strategy.stop_condition:
+            pagination_strategy = StopConditionPaginationStrategyDecorator(
+                pagination_strategy,
+                InterpolatedStopCondition(
+                    condition=model.pagination_strategy.stop_condition,
+                    decoder=decoder,
+                    parameters=model.pagination_strategy.parameters or {},
+                    config=config,
+                ),
+            )
+        elif cursor_used_for_stop_condition:
             pagination_strategy = StopConditionPaginationStrategyDecorator(
                 pagination_strategy, CursorStopCondition(cursor_used_for_stop_condition)
             )
