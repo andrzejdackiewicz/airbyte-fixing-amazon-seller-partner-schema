@@ -28,7 +28,7 @@ public class MariadbColumnstoreDestinationAcceptanceTest extends DestinationAcce
 
   private final StandardNameTransformer namingResolver = new MariadbColumnstoreNameTransformer();
 
-  private MariaDBContainer db;
+  protected MariaDBContainer db;
 
   @Override
   protected boolean implementsNamespaces() {
@@ -104,7 +104,7 @@ public class MariadbColumnstoreDestinationAcceptanceTest extends DestinationAcce
     return database.queryJsons(query);
   }
 
-  private static JdbcDatabase getDatabase(final JsonNode config) {
+  protected JdbcDatabase getDatabase(final JsonNode config) {
     return new DefaultJdbcDatabase(
         DataSourceFactory.create(
             config.get(JdbcUtils.USERNAME_KEY).asText(),
