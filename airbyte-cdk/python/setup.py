@@ -88,12 +88,15 @@ setup(
     extras_require={
         "dev": [
             avro_dependency,
+            "click",
             fastavro_dependency,
             "freezegun",
             "mypy",
             "pytest",
             "pytest-cov",
             "pytest-mock",
+            "pyfakefs",
+            "ruamel-yaml",
             "requests-mock",
             "pytest-httpserver",
             "pandas==2.0.3",
