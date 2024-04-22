@@ -73,7 +73,7 @@ internal constructor(
     ) : this(
         IntegrationCliParser(),
         Consumer<AirbyteMessage> { message: AirbyteMessage ->
-            Destination.Companion.defaultOutputRecordCollector(message)
+            Destination.defaultOutputRecordCollector(message)
         },
         null,
         source
@@ -126,12 +126,14 @@ internal constructor(
 
         try {
             when (parsed!!.command) {
-                Command.SPEC ->
-                    outputRecordCollector.accept(
-                        AirbyteMessage()
-                            .withType(AirbyteMessage.Type.SPEC)
-                            .withSpec(integration.spec())
-                    )
+                Command.SPEC -> {
+                outputRecordCollector.accept(
+                    AirbyteMessage()
+                        .withType(AirbyteMessage.Type.SPEC)
+                        .withSpec(integration.spec())
+                );
+                    Destination.doFlush();
+            }
                 Command.CHECK -> {
                     val config = parseConfig(parsed!!.getConfigPath())
                     if (integration is Destination) {
@@ -155,6 +157,7 @@ internal constructor(
                                         .withMessage(e.message)
                                 )
                         )
+                        Destination.doFlush();
                     }
 
                     outputRecordCollector.accept(
@@ -162,6 +165,7 @@ internal constructor(
                             .withType(AirbyteMessage.Type.CONNECTION_STATUS)
                             .withConnectionStatus(integration.check(config))
                     )
+                    Destination.doFlush();
                 }
                 Command.DISCOVER -> {
                     val config = parseConfig(parsed!!.getConfigPath())
@@ -171,6 +175,7 @@ internal constructor(
                             .withType(AirbyteMessage.Type.CATALOG)
                             .withCatalog(source!!.discover(config))
                     )
+                    Destination.doFlush();
                 }
                 Command.READ -> {
                     val config = parseConfig(parsed!!.getConfigPath())
