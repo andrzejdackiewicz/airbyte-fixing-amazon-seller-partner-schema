@@ -1,41 +1,126 @@
-name: Deprecation message for test slash command
+name: On-Demand Connector Tests for PRs
 on:
   workflow_dispatch:
     inputs:
       connector:
         description: "Airbyte Connector"
         required: true
-      repo:
-        description: "Repo to check out code from. Defaults to the main airbyte repo. Set this when building connectors from forked repos."
+      pr:
+        description: "Pull request number. Used to link the comment to the PR."
         required: false
-        default: "airbytehq/airbyte"
-      gitref:
-        description: "The git ref to check out from the specified repository."
-        required: false
-        default: master
       comment-id:
         description: "The comment-id of the slash command. Used to update the comment with the status."
         required: false
-      uuid:
-        description: "Custom UUID of workflow run. Used because GitHub dispatches endpoint does not return workflow run id."
-        required: false
-      connector-acceptance-test-version:
-        description: "Set a specific connector acceptance test version to use. Enter 'dev' to test, build and use a local version of Connector Acceptance Test."
-        required: false
-        default: "latest"
-      local_cdk:
-        description: "Run Connector Acceptance Tests against the CDK version on the current branch."
-        required: false
 jobs:
-  write-deprecation-message:
+  on-demand-connector-tests:
+    name: On-Demand Connector Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Print deprecation message
-        uses: peter-evans/create-or-update-comment@v1
-        with:
-          comment-id: ${{ github.event.inputs.comment-id }}
-          body: |
-            > :warning: The test slash command is now deprecated.<br>
-            The connector tests are automatically triggered as CI checks.<br>
-            Please use /legacy-test if you need to test CDK or CAT changes.<br>
-            Please join post to #pipeline-complaint-hotline slack channel if something is not working as expected.<br>
+    - name: Create URL to the run output
+      id: vars
+      run: echo "run-url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+    - name: Append comment with job run link
+      id: first-comment-action
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ github.event.inputs.comment-id }}
+        issue-number: ${{ github.event.inputs.pr }}
+        body: |
+
+          > PR test job started... [Check job output.][1]
+
+          [1]: ${{ steps.vars.outputs.run-url }}
+
+    - name: Checkout Airbyte
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GH_PAT_APPROVINGTON_OCTAVIA }}
+
+    - name: Checkout PR (${{ github.event.inputs.pr }})
+      uses: dawidd6/action-checkout-pr@v1
+      with:
+        pr: ${{ github.event.inputs.pr }}
+
+    - name: Get PR info
+      id: pr-info
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        PR_JSON=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.inputs.pr }})
+        echo "source_repo=$(echo $PR_JSON | jq -r .head.repo.full_name)" >> $GITHUB_OUTPUT
+        echo "source_branch=$(echo $PR_JSON | jq -r .head.ref)" >> $GITHUB_OUTPUT
+        echo "sha=$(echo $PR_JSON | jq -r .head.sha)" >> $GITHUB_OUTPUT
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install `airbyte-ci` CLI
+      # We use the stable `airbyte-ci` from `master`. Intentionally ignores any CI changes
+      # local to this branch.
+      run: >
+        pip install
+        git+https://github.com/airbytehq/airbyte.git#subdirectory=airbyte-ci/connectors/pipelines
+
+    - name: Warm up `airbyte-ci` CLI
+      run: airbyte-ci --help
+
+    - name: Run `airbyte-ci` test
+      id: test-on-demand
+      env:
+        GCS_CREDENTIALS: ${{ secrets.METADATA_SERVICE_PROD_GCS_CREDENTIALS }}
+        DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+        DOCKER_HUB_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      run: >
+        airbyte-ci
+        --disable-update-check
+        connectors
+        --name=${{ github.event.inputs.connector }}
+        test
+
+    - name: Upload pipeline reports
+      id: upload-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: pipeline-reports
+        path: /home/runner/work/airbyte/airbyte/airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test/manual
+
+    - name: Append success comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.inputs.pr }}
+        comment-id: ${{ steps.first-comment-action.outputs.comment-id }}
+        reactions: hooray
+        body: |
+          > ✅ Tests passed. [📎][1]
+
+          [1]: ${{ steps.upload-artifact.outputs.artifact-url }}
+    - name: "Mark success in GitHub Actions"
+      if: always()
+      run: |
+        jobs=("Connectors CI tests" "Connectors CI")
+        for job in "${jobs[@]}"; do
+          curl --request POST \
+          --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ steps.pr-info.outputs.sha }} \
+          --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+          --header 'content-type: application/json' \
+          --data '{
+            "state": "${{ job.status }}",
+            "context": "'"$job"'",
+            "target_url": "${{ steps.vars.outputs.run-url }}"
+            }'
+        done
+
+    - name: Append failure comment
+      if: failure()
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.inputs.pr }}
+        comment-id: ${{ steps.first-comment-action.outputs.comment-id }}
+        reactions: confused
+        body: |
+          > ❌ Tests failed. [📎][1]
+
+          [1]: ${{ steps.upload-artifact.outputs.artifact-url }}
