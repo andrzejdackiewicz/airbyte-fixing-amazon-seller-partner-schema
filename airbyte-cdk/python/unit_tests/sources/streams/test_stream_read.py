@@ -24,7 +24,7 @@ from airbyte_cdk.models import (
 from airbyte_cdk.models import Type as MessageType
 from airbyte_cdk.sources.connector_state_manager import ConnectorStateManager
 from airbyte_cdk.sources.message import InMemoryMessageRepository, MessageRepository
-from airbyte_cdk.sources.streams import Stream
+from airbyte_cdk.sources.streams import IncrementalMixin, Stream
 from airbyte_cdk.sources.streams.concurrent.adapters import StreamFacade
 from airbyte_cdk.sources.streams.concurrent.cursor import Cursor, FinalStateCursor
 from airbyte_cdk.sources.streams.concurrent.partitions.partition import Partition
@@ -39,9 +39,10 @@ _STREAM_NAME = "STREAM"
 _NO_STATE = None
 
 
-class _MockStream(Stream):
+class _MockStream(Stream, IncrementalMixin):
     def __init__(self, slice_to_records: Mapping[str, List[Mapping[str, Any]]]):
         self._slice_to_records = slice_to_records
+        self._state = {}
 
     @property
     def primary_key(self) -> Optional[Union[str, List[str], List[List[str]]]]:
@@ -64,6 +65,14 @@ class _MockStream(Stream):
 
     def get_json_schema(self) -> Mapping[str, Any]:
         return {}
+
+    @property
+    def state(self) -> MutableMapping[str, Any]:
+        return self._state
+
+    @state.setter
+    def state(self, value: MutableMapping[str, Any]) -> None:
+        self._state = value
 
 
 class MockConcurrentCursor(Cursor):
