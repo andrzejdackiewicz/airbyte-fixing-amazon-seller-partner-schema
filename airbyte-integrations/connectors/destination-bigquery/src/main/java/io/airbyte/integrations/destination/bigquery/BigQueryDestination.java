@@ -4,6 +4,8 @@
 
 package io.airbyte.integrations.destination.bigquery;
 
+import static java.util.stream.Collectors.joining;
+
 import com.codepoetics.protonpack.StreamUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -31,11 +33,17 @@ import io.airbyte.cdk.integrations.destination.gcs.GcsNameTransformer;
 import io.airbyte.cdk.integrations.destination.gcs.GcsStorageOperations;
 import io.airbyte.commons.exceptions.ConfigErrorException;
 import io.airbyte.commons.json.Jsons;
+import io.airbyte.integrations.base.destination.typing_deduping.AirbyteProtocolType;
+import io.airbyte.integrations.base.destination.typing_deduping.AirbyteType;
+import io.airbyte.integrations.base.destination.typing_deduping.Array;
 import io.airbyte.integrations.base.destination.typing_deduping.CatalogParser;
+import io.airbyte.integrations.base.destination.typing_deduping.ColumnId;
 import io.airbyte.integrations.base.destination.typing_deduping.DefaultTyperDeduper;
 import io.airbyte.integrations.base.destination.typing_deduping.NoOpTyperDeduperWithV1V2Migrations;
 import io.airbyte.integrations.base.destination.typing_deduping.ParsedCatalog;
 import io.airbyte.integrations.base.destination.typing_deduping.StreamConfig;
+import io.airbyte.integrations.base.destination.typing_deduping.StreamId;
+import io.airbyte.integrations.base.destination.typing_deduping.Struct;
 import io.airbyte.integrations.base.destination.typing_deduping.TyperDeduper;
 import io.airbyte.integrations.destination.bigquery.formatter.BigQueryRecordFormatter;
 import io.airbyte.integrations.destination.bigquery.formatter.DefaultBigQueryRecordFormatter;
@@ -59,6 +67,7 @@ import io.airbyte.protocol.models.v0.DestinationSyncMode;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,6 +77,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.joda.time.DateTime;
@@ -237,6 +247,9 @@ public class BigQueryDestination extends BaseConnector implements Destination {
     final BigQuerySqlGenerator sqlGenerator = new BigQuerySqlGenerator(config.get(BigQueryConsts.CONFIG_PROJECT_ID).asText(), datasetLocation);
     final Optional<String> rawNamespaceOverride = TypingAndDedupingFlag.getRawNamespaceOverride(RAW_DATA_DATASET);
     final ParsedCatalog parsedCatalog = parseCatalog(config, catalog, datasetLocation, rawNamespaceOverride);
+
+    throwIfAnyUnsupportedPrimaryKeys(disableTypeDedupe, parsedCatalog);
+
     final BigQuery bigquery = getBigQuery(config);
     final TyperDeduper typerDeduper =
         buildTyperDeduper(sqlGenerator, parsedCatalog, bigquery, datasetLocation, disableTypeDedupe);
@@ -290,6 +303,45 @@ public class BigQueryDestination extends BaseConnector implements Destination {
         typerDeduper,
         parsedCatalog,
         BigQueryUtils.getDatasetId(config));
+  }
+
+  /**
+   * Check for any streams running in dedup mode, with at least one primary key column whose type will
+   * resolve to JSON.
+   */
+  @VisibleForTesting
+  static void throwIfAnyUnsupportedPrimaryKeys(boolean disableTypingDeduping, ParsedCatalog parsedCatalog) {
+    // These PKs only matter if we're running T+D. Return early if not.
+    if (disableTypingDeduping) {
+      return;
+    }
+
+    final Map<StreamId, List<String>> problematicStreams = new HashMap<>();
+    for (StreamConfig streamConfig : parsedCatalog.getStreams()) {
+      // PKs only matter in dedup mode. In theory, in non-dedup mode, we shouldn't even receive a PK
+      // but we might as well be defensive here.
+      if (streamConfig.getDestinationSyncMode() == DestinationSyncMode.APPEND_DEDUP) {
+        final List<String> jsonPks = streamConfig.getPrimaryKey().stream()
+            .filter(pkColumn -> {
+              AirbyteType type = streamConfig.getColumns().get(pkColumn);
+              return type instanceof Array || type instanceof Struct || type == AirbyteProtocolType.UNKNOWN;
+            }).map(ColumnId::getOriginalName)
+            .toList();
+        if (!jsonPks.isEmpty()) {
+          problematicStreams.put(streamConfig.getId(), jsonPks);
+        }
+      }
+    }
+    if (!problematicStreams.isEmpty()) {
+      final String streamMessages = problematicStreams.entrySet().stream().map((entry) -> {
+        final StreamId streamId = entry.getKey();
+        final String humanReadableStreamId = streamId.getOriginalNamespace() + "." + streamId.getOriginalName();
+        final String columns = String.join(", ", entry.getValue());
+        return humanReadableStreamId + ": " + columns;
+      }).sorted()
+          .collect(joining("\n"));
+      throw new ConfigErrorException("JSON-typed columns are not currently supported in primary keys.\n" + streamMessages);
+    }
   }
 
   protected Supplier<ConcurrentMap<AirbyteStreamNameNamespacePair, AbstractBigQueryUploader<?>>> getUploaderMap(
