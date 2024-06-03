@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import re
-from typing import Any, Callable, List, Mapping, Optional, Type, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, List, Mapping, Optional, Type, Union, get_args, get_origin, get_type_hints
 
 from airbyte_cdk.models import Level
 from airbyte_cdk.sources.declarative.auth import DeclarativeOauth2Authenticator, JwtAuthenticator
@@ -27,6 +27,7 @@ from airbyte_cdk.sources.declarative.datetime import MinMaxDatetime
 from airbyte_cdk.sources.declarative.declarative_stream import DeclarativeStream
 from airbyte_cdk.sources.declarative.decoders import JsonDecoder
 from airbyte_cdk.sources.declarative.extractors import DpathExtractor, RecordFilter, RecordSelector
+from airbyte_cdk.sources.declarative.extractors.record_filter import ClientSideIncrementalRecordFilterDecorator
 from airbyte_cdk.sources.declarative.extractors.record_selector import SCHEMA_TRANSFORMER_TYPE_MAPPING
 from airbyte_cdk.sources.declarative.incremental import (
     CursorFactory,
@@ -600,6 +601,29 @@ class ModelToComponentFactory:
             parameters=model.parameters or {},
         )
 
+    def get_client_side_incremental(
+        self, model: DeclarativeStreamModel, config: Config, slicer: Optional[StreamSlicer] = None
+    ) -> Optional[dict[str, Any]]:
+        if model.incremental_sync:
+            model_incremental_sync = model.incremental_sync
+            if model_incremental_sync.is_data_feed or model_incremental_sync.start_time_option:
+                return None
+            if not model_incremental_sync.start_time_option and not model_incremental_sync.end_time_option:
+                if slicer and not isinstance(slicer, (DatetimeBasedCursor, PerPartitionCursor)):
+                    raise ValueError("Unsupported Slicer is used. PerPartitionCursor should be used here instead")
+                return {
+                    "date_time_based_cursor": self._create_component_from_model(model=model_incremental_sync, config=config),
+                    "per_partition_cursor": slicer if isinstance(slicer, PerPartitionCursor) else None,
+                }
+            if (
+                not model_incremental_sync.start_time_option
+                and not model_incremental_sync.start_datetime
+                and model_incremental_sync.end_time_option
+                and model_incremental_sync.end_datetime
+            ):
+                raise ValueError("Data Feed option should be selected")
+        return None
+
     def create_declarative_stream(self, model: DeclarativeStreamModel, config: Config, **kwargs: Any) -> DeclarativeStream:
         # When constructing a declarative stream, we assemble the incremental_sync component and retriever's partition_router field
         # components if they exist into a single CartesianProductStreamSlicer. This is then passed back as an argument when constructing the
@@ -610,6 +634,9 @@ class ModelToComponentFactory:
         primary_key = model.primary_key.__root__ if model.primary_key else None
         stop_condition_on_cursor = (
             model.incremental_sync and hasattr(model.incremental_sync, "is_data_feed") and model.incremental_sync.is_data_feed
+        )
+        client_side_incremental_sync: Optional[dict[str, Any]] = self.get_client_side_incremental(
+            model=model, config=config, slicer=combined_slicers
         )
         transformations = []
         if model.transformations:
@@ -622,6 +649,7 @@ class ModelToComponentFactory:
             primary_key=primary_key,
             stream_slicer=combined_slicers,
             stop_condition_on_cursor=stop_condition_on_cursor,
+            client_side_incremental_sync=client_side_incremental_sync,
             transformations=transformations,
         )
         cursor_field = model.incremental_sync.cursor_field if model.incremental_sync else None
@@ -982,11 +1010,19 @@ class ModelToComponentFactory:
         config: Config,
         *,
         transformations: List[RecordTransformation],
+        client_side_incremental_sync: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> RecordSelector:
         assert model.schema_normalization is not None  # for mypy
         extractor = self._create_component_from_model(model=model.extractor, config=config)
         record_filter = self._create_component_from_model(model.record_filter, config=config) if model.record_filter else None
+        if client_side_incremental_sync:
+            record_filter = ClientSideIncrementalRecordFilterDecorator(
+                config=config,
+                parameters=model.parameters,
+                condition=model.record_filter.condition if model.record_filter else None,
+                **client_side_incremental_sync,
+            )
         schema_normalization = TypeTransformer(SCHEMA_TRANSFORMER_TYPE_MAPPING[model.schema_normalization])
 
         return RecordSelector(
@@ -1038,10 +1074,16 @@ class ModelToComponentFactory:
         primary_key: Optional[Union[str, List[str], List[List[str]]]],
         stream_slicer: Optional[StreamSlicer],
         stop_condition_on_cursor: bool = False,
+        client_side_incremental_sync: Optional[Dict[str, Any]] = None,
         transformations: List[RecordTransformation],
     ) -> SimpleRetriever:
         requester = self._create_component_from_model(model=model.requester, config=config, name=name)
-        record_selector = self._create_component_from_model(model=model.record_selector, config=config, transformations=transformations)
+        record_selector = self._create_component_from_model(
+            model=model.record_selector,
+            config=config,
+            transformations=transformations,
+            client_side_incremental_sync=client_side_incremental_sync,
+        )
         url_base = model.requester.url_base if hasattr(model.requester, "url_base") else requester.get_url_base()
         stream_slicer = stream_slicer or SinglePartitionRouter(parameters={})
         cursor = stream_slicer if isinstance(stream_slicer, DeclarativeCursor) else None
