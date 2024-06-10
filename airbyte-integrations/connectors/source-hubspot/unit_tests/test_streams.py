@@ -375,7 +375,16 @@ def custom_object_schema_fixture():
                 "formField": True,
             }
         ],
-        "associations": [],
+        "associations": [
+            {
+                "createdAt": "2024-04-11T13:02:44.674Z",
+                "fromObjectTypeId": "2-7232155",
+                "name": "animals_to_contact",
+                "id": "105",
+                "toObjectTypeId": "42-42",
+                "updatedAt": "2024-04-11T13:02:44.674Z",
+            }
+        ],
         "name": "animals",
     }
 
@@ -391,7 +400,8 @@ def expected_custom_object_json_schema():
             "createdAt": {"type": ["null", "string"], "format": "date-time"},
             "updatedAt": {"type": ["null", "string"], "format": "date-time"},
             "archived": {"type": ["null", "boolean"]},
-            "properties": {"type": ["null", "object"], "properties": {"name": {"type": ["null", "string"]}}},
+            # "properties": {"type": ["null", "object"], "properties": {"name": {"type": ["null", "string"]}}},
+            "associations": {"type": ["null", "object"], "properties": {}},
             "properties_name": {"type": ["null", "string"]},
         },
     }
@@ -405,6 +415,7 @@ def test_custom_object_stream_doesnt_call_hubspot_to_get_json_schema_if_availabl
         schema=expected_custom_object_json_schema,
         fully_qualified_name="p123_animals",
         custom_properties={"name": {"type": ["null", "string"]}},
+        associations = ["contact"],
         **common_params,
     )
 
@@ -440,10 +451,13 @@ def test_contacts_merged_audit_stream_doesnt_call_hubspot_to_get_json_schema(req
 
 def test_get_custom_objects_metadata_success(requests_mock, custom_object_schema, expected_custom_object_json_schema, api):
     requests_mock.register_uri("GET", "/crm/v3/schemas", json={"results": [custom_object_schema]})
-    for (entity, fully_qualified_name, schema, custom_properties) in api.get_custom_objects_metadata():
+    association_type_id = custom_object_schema['associations'][0]['toObjectTypeId']
+    requests_mock.register_uri("GET", f"/crm/v3/schemas/{association_type_id}", json={"fullyQualifiedName": "contact"})
+    for (entity, fully_qualified_name, schema, custom_properties, associations) in api.get_custom_objects_metadata():
         assert entity == "animals"
         assert fully_qualified_name == "p19936848_Animal"
         assert schema == expected_custom_object_json_schema
+        assert set(associations) == {"contact"}
 
 
 @pytest.mark.parametrize(
@@ -469,7 +483,7 @@ def test_get_custom_objects_metadata_success(requests_mock, custom_object_schema
                     "id": 1,
                     "createdAt": "2020-01-01",
                     "email": {"from": "integration-test@airbyte.io", "to": "michael_scott@gmail.com"},
-                    "properties": {"phone": "+38044-111-111", "address": "31, Cleveland str, Washington DC"},
+                    # "properties": {"phone": "+38044-111-111", "address": "31, Cleveland str, Washington DC"},
                     "properties_phone": "+38044-111-111",
                     "properties_address": "31, Cleveland str, Washington DC",
                 }
@@ -511,7 +525,7 @@ def test_get_custom_objects_metadata_success(requests_mock, custom_object_schema
                     "email": {"from": "integration-test@airbyte.io", "to": "michael_scott@gmail.com"},
                     "email_from": "integration-test@airbyte.io",
                     "email_to": "michael_scott@gmail.com",
-                    "properties": {"phone": "+38044-111-111", "address": "31, Cleveland str, Washington DC"},
+                    # "properties": {"phone": "+38044-111-111", "address": "31, Cleveland str, Washington DC"},
                     "properties_phone": "+38044-111-111",
                     "properties_address": "31, Cleveland str, Washington DC",
                 }
