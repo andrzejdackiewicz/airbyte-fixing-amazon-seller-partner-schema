@@ -2,8 +2,12 @@ version: 0.72.1
 type: DeclarativeSource
 
 definitions:
-  # Authenticators
+  # SchemaLoader
+  schema_loader:
+    type: JsonFileSchemaLoader
+    file_path: "./source_jira/schemas/{{ parameters['name'] }}.json"
 
+  # Authenticators
   authenticator:
     type: BasicHttpAuthenticator
     username: "{{ config['email'] }}"
@@ -101,6 +105,8 @@ definitions:
 
   full_refresh_stream:
     type: DeclarativeStream
+    schema_loader:
+      $ref: "#/definitions/schema_loader"
     retriever: "#/definitions/retriever"
 
   # Full Refresh Streams
@@ -1061,13 +1067,6 @@ definitions:
 
   # Incremental Streams
 
-  semi_incremental_retriever:
-    $ref: "#/definitions/retriever"
-    record_selector:
-      $ref: "#/definitions/selector"
-      record_filter:
-        condition: "{{ record['updated'] >= stream_slice['start_time'] }}"
-
   incremental_sync:
     type: DatetimeBasedCursor
     cursor_field: "updated"
@@ -1079,12 +1078,16 @@ definitions:
 
   incremental_stream:
     type: DeclarativeStream
+    schema_loader:
+      $ref: "#/definitions/schema_loader"
     retriever: "#/definitions/retriever"
     incremental_sync: "#/definitions/incremental_sync"
 
   semi_incremental_stream:
     $ref: "#/definitions/incremental_stream"
-    retriever: "#/definitions/semi_incremental_retriever"
+    incremental_sync:
+      $ref: "#/definitions/incremental_sync"
+      use_client_side_incremental: true
 
   # https://developer.atlassian.com/cloud/jira/software/rest/api-group-board/#api-rest-agile-1-0-board-boardid-issue-get
   board_issues_stream:

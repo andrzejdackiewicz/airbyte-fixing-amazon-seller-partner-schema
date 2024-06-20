@@ -2,12 +2,10 @@
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 #
 
-import re
-
 import pendulum
 import pytest
 import responses
-from airbyte_cdk.sources.declarative.exceptions import ReadException
+from airbyte_cdk.sources.streams.http.http_client import MessageRepresentationAirbyteTracedErrors
 from conftest import find_stream
 from source_jira.source import SourceJira
 from source_jira.streams import IssueFields, Issues, PullRequests
@@ -19,14 +17,9 @@ def test_application_roles_stream_401_error(config, caplog):
     config["domain"] = "test_application_domain"
     responses.add(responses.GET, f"https://{config['domain']}/rest/api/3/applicationrole", status=401)
 
-    authenticator = SourceJira().get_authenticator(config=config)
-    args = {"authenticator": authenticator, "domain": config["domain"], "projects": config.get("projects", [])}
     stream = find_stream("application_roles", config)
 
-    with pytest.raises(
-        ReadException,
-        match="Request to https://test_application_domain/rest/api/3/applicationrole failed with status code 401 and error message None",
-    ):
+    with pytest.raises(MessageRepresentationAirbyteTracedErrors):
         list(read_full_refresh(stream))
 
 
@@ -50,9 +43,7 @@ def test_application_roles_stream_http_error(config, application_roles_response)
     responses.add(responses.GET, f"https://{config['domain']}/rest/api/3/applicationrole", json={"error": "not found"}, status=404)
 
     stream = find_stream("application_roles", config)
-    with pytest.raises(
-        ReadException, match="Request to https://domain/rest/api/3/applicationrole failed with status code 404 and error message not found"
-    ):
+    with pytest.raises(MessageRepresentationAirbyteTracedErrors):
         list(read_full_refresh(stream))
 
 
@@ -82,15 +73,7 @@ def test_board_stream_forbidden(config, boards_response, caplog):
     )
     stream = find_stream("boards", config)
 
-    expected_url = "https://test_boards_domain/rest/agile/1.0/board?maxResults=50"
-    escaped_url = re.escape(expected_url)
-
-    with pytest.raises(
-        ReadException,
-        match=(
-            f"Request to {escaped_url} failed with status code 403 and error message 403 Client Error: " f"Forbidden for url: {escaped_url}"
-        ),
-    ):
+    with pytest.raises(MessageRepresentationAirbyteTracedErrors):
         list(read_full_refresh(stream))
 
 
@@ -101,7 +84,7 @@ def test_dashboards_stream(config, dashboards_response):
         f"https://{config['domain']}/rest/api/3/dashboard",
         json=dashboards_response,
     )
-    
+
     stream = find_stream("dashboards", config)
     records = list(read_full_refresh(stream))
 
@@ -137,7 +120,7 @@ def test_groups_stream(config, groups_response):
 def test_issues_fields_stream(config, mock_fields_response):
     stream = find_stream("issue_fields", config)
     records = list(read_full_refresh(stream))
-    
+
     assert len(records) == 6
     assert len(responses.calls) == 1
 
@@ -154,7 +137,7 @@ def test_python_issues_fields_ids_by_name(config, mock_fields_response):
         "Issue Type": ["issuetype"],
         "Parent": ["parent"],
         "Issue Type2": ["issuetype2"],
-        "Issue Type3": ["issuetype3"]
+        "Issue Type3": ["issuetype3"],
     }
     assert expected_ids_by_name == stream.field_ids_by_name()
 
@@ -423,7 +406,7 @@ def test_board_does_not_support_sprints(config, mock_board_response, sprints_res
         responses.GET,
         f"https://{config['domain']}/rest/agile/1.0/board/2/sprint?maxResults=50",
         json={"errorMessages": ["The board does not support sprints"], "errors": {}},
-        status=400
+        status=400,
     )
     responses.add(
         responses.GET,
@@ -434,15 +417,11 @@ def test_board_does_not_support_sprints(config, mock_board_response, sprints_res
     records = list(read_full_refresh(stream))
     assert len(records) == 2
 
-    # No matter what the error_message value is, it is displayed as 'Ignoring response for failed request with error message None'
-    # Feature request is added to fix this problem.
-    # assert (
-    #     "The board does not support sprints. The board does not have a sprint board. if it's a team-managed one, "
-    #     "does it have sprints enabled under project settings? If it's a company-managed one,"
-    #     " check that it has at least one Scrum board associated with it."
-    # ) in caplog.text
-
-    assert "Ignoring response for failed request" in caplog.text
+    assert (
+        "The board does not support sprints. The board does not have a sprint board. if it's a team-managed one, "
+        "does it have sprints enabled under project settings? If it's a company-managed one,"
+        " check that it has at least one Scrum board associated with it."
+    ) in caplog.text
 
 
 @responses.activate
@@ -596,14 +575,14 @@ def test_avatars_stream_should_retry(config, caplog):
             responses.GET,
             f"https://{config['domain']}/rest/api/3/avatar/{slice}/system",
             json={"errorMessages": ["The error message"], "errors": {}},
-            status=400
+            status=400,
         )
 
     stream = find_stream("avatars", config)
     records = list(read_full_refresh(stream))
 
     assert len(records) == 0
-    assert "Ignoring response for failed request" in caplog.text
+    assert "Bad request. Please check your request parameters." in caplog.text
 
 
 @responses.activate
@@ -617,8 +596,8 @@ def test_declarative_issues_stream(config, mock_projects_responses_additional_pr
     assert "non_empty_field" in records[0]["fields"]
 
     assert len(responses.calls) == 3
-    # error_message = "Stream `issues`. An error occurred, details: [\"The value '3' does not exist for the field 'project'.\"]. Skipping for now. The user doesn't have permission to the project. Please grant the user to the project."
-    assert "Ignoring response for failed request with error message None" in caplog.messages
+
+    assert "The user doesn't have permission to the project. Please grant the user to the project." in caplog.messages
 
 
 @responses.activate
@@ -644,8 +623,7 @@ def test_python_issues_stream_updated_state(config):
     stream = Issues(**args)
 
     updated_state = stream._get_updated_state(
-        current_stream_state={"updated": "2021-01-01T00:00:00Z"},
-        latest_record={"updated": "2021-01-02T00:00:00Z"}
+        current_stream_state={"updated": "2021-01-01T00:00:00Z"}, latest_record={"updated": "2021-01-02T00:00:00Z"}
     )
     assert updated_state == {"updated": "2021-01-02T00:00:00Z"}
 
@@ -658,7 +636,7 @@ def test_python_issues_stream_updated_state(config):
         ("pullrequest={dataType=pullrequest, state=thestate, stateCount=1}", True),
         ("pullrequest={dataType=pullrequest, state=thestate, stateCount=0}", False),
         ("{}", False),
-    )
+    ),
 )
 def test_python_pull_requests_stream_has_pull_request(config, dev_field, has_pull_request):
     authenticator = SourceJira().get_authenticator(config=config)
@@ -676,7 +654,9 @@ def test_python_pull_requests_stream_has_pull_request(config, dev_field, has_pul
 
 
 @responses.activate
-def test_python_pull_requests_stream_has_pull_request(config, mock_fields_response, mock_projects_responses_additional_project, mock_issues_responses_with_date_filter):
+def test_python_pull_requests_stream_has_pull_request(
+    config, mock_fields_response, mock_projects_responses_additional_project, mock_issues_responses_with_date_filter
+):
     authenticator = SourceJira().get_authenticator(config=config)
     args = {"authenticator": authenticator, "domain": config["domain"], "projects": config["projects"]}
     issues_stream = Issues(**args)
@@ -902,8 +882,6 @@ def test_project_versions_stream(config, mock_non_deleted_projects_responses, pr
         json=projects_versions_response,
     )
 
-    authenticator = SourceJira().get_authenticator(config=config)
-    args = {"authenticator": authenticator, "domain": config["domain"], "projects": config.get("projects", [])}
     stream = find_stream("project_versions", config)
     records = list(read_full_refresh(stream))
 
@@ -918,7 +896,7 @@ def test_project_versions_stream(config, mock_non_deleted_projects_responses, pr
             "issues",
             2,
             4,
-            "Ignoring response for failed request with error message None"
+            "Ignoring response for failed request with error message None",
             # "Stream `issues`. An error occurred, details: [\"The value '3' does not "
             # "exist for the field 'project'.\"]. Skipping for now. The user doesn't have "
             # "permission to the project. Please grant the user to the project.",
@@ -927,28 +905,28 @@ def test_project_versions_stream(config, mock_non_deleted_projects_responses, pr
             "issue_custom_field_contexts",
             2,
             4,
-            "Ignoring response for failed request with error message None"
+            "Ignoring response for failed request with error message None",
             # "Stream `issue_custom_field_contexts`. An error occurred, details: ['Not found issue custom field context for issue fields issuetype2']. Skipping for now. ",
         ),
         (
             "issue_custom_field_options",
             1,
             6,
-            "Ignoring response for failed request with error message None"
+            "Ignoring response for failed request with error message None",
             # "Stream `issue_custom_field_options`. An error occurred, details: ['Not found issue custom field options for issue fields issuetype3']. Skipping for now. ",
         ),
         (
             "issue_watchers",
             1,
             6,
-            "Ignoring response for failed request with error message None"
+            "Ignoring response for failed request with error message None",
             # "Stream `issue_watchers`. An error occurred, details: ['Not found watchers for issue TESTKEY13-2']. Skipping for now. ",
         ),
         (
             "project_email",
             4,
             4,
-            "Ignoring response for failed request with error message None"
+            "Ignoring response for failed request with error message None",
             # "Stream `project_email`. An error occurred, details: ['No access to emails for project 3']. Skipping for now. ",
         ),
     ],
