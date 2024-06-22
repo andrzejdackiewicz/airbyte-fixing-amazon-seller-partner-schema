@@ -13,7 +13,7 @@ import pendulum
 import requests
 from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources.streams.availability_strategy import AvailabilityStrategy
-from airbyte_cdk.sources.streams.core import StreamData
+from airbyte_cdk.sources.streams.core import CheckpointMixin, StreamData
 from airbyte_cdk.sources.streams.http import HttpStream, HttpSubStream
 from airbyte_cdk.sources.streams.http.availability_strategy import HttpAvailabilityStrategy
 from airbyte_cdk.sources.utils.transform import TransformConfig, TypeTransformer
@@ -232,17 +232,6 @@ class CreatedCursorIncrementalStripeStream(StripeStream):
         self.start_date_max_days_from_now = start_date_max_days_from_now
         self._cursor_field = cursor_field
 
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        """
-        Return the latest state by comparing the cursor value in the latest record with the stream's most recent state object
-        and returning an updated state object.
-        """
-        state_cursor_value = current_stream_state.get(self.cursor_field, 0)
-        latest_record_value = latest_record.get(self.cursor_field)
-        if state_cursor_value:
-            return {self.cursor_field: max(latest_record_value, state_cursor_value)}
-        return {self.cursor_field: latest_record_value}
-
     def request_params(
         self,
         stream_state: Mapping[str, Any] = None,
@@ -264,6 +253,9 @@ class CreatedCursorIncrementalStripeStream(StripeStream):
     def stream_slices(
         self, sync_mode: SyncMode, cursor_field: List[str] = None, stream_state: Mapping[str, Any] = None
     ) -> Iterable[Optional[Mapping[str, Any]]]:
+        """
+        Note that we can't use `self._state` here as it will be updated during the availability check
+        """
         stream_state = stream_state or {}
         start_ts = self.get_start_timestamp(stream_state)
         if start_ts >= pendulum.now().int_timestamp:
@@ -314,7 +306,7 @@ class Events(CreatedCursorIncrementalStripeStream):
         return "events"
 
 
-class UpdatedCursorIncrementalStripeStream(StripeStream):
+class UpdatedCursorIncrementalStripeStream(StripeStream, CheckpointMixin):
     """
     `CreatedCursorIncrementalStripeStream` does not provide a way to read updated data since given date because the API does not allow to do this.
     It only returns newly created entities since given date. So to have all the updated data as well we need to make use of the Events API,
@@ -351,6 +343,7 @@ class UpdatedCursorIncrementalStripeStream(StripeStream):
         record_extractor = record_extractor or UpdatedCursorIncrementalRecordExtractor(
             self.cursor_field, self.legacy_cursor_field, response_filter
         )
+        self._state: MutableMapping[str, Any] = {}
         super().__init__(*args, record_extractor=record_extractor, **kwargs)
         # `lookback_window_days` is hardcoded as it does not make any sense to re-export events,
         # as each event holds the latest value of a record.
@@ -367,7 +360,16 @@ class UpdatedCursorIncrementalStripeStream(StripeStream):
             record_extractor=EventRecordExtractor(cursor_field=self.cursor_field, response_filter=response_filter),
         )
 
-    def update_cursor_field(self, stream_state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    @property
+    def state(self) -> MutableMapping[str, Any]:
+        return self._state
+
+    @state.setter
+    def state(self, value: MutableMapping[str, Any]) -> None:
+        """State setter, accept state serialized by state getter."""
+        self._state = value if value else {}
+
+    def _update_cursor_field(self, stream_state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         if not self.legacy_cursor_field:
             # Streams that used to support only full_refresh mode.
             # Now they support event-based incremental syncs but have a cursor field only in that mode.
@@ -376,10 +378,9 @@ class UpdatedCursorIncrementalStripeStream(StripeStream):
         current_stream_state_value = stream_state.get(self.cursor_field, stream_state.get(self.legacy_cursor_field, 0))
         return {self.cursor_field: current_stream_state_value}
 
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
+    def extract_updated_state(self, latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
         latest_record_value = latest_record.get(self.cursor_field)
-        current_stream_state = self.update_cursor_field(current_stream_state)
-        current_state_value = current_stream_state.get(self.cursor_field)
+        current_state_value = self.state.get(self.cursor_field)
         if current_state_value:
             return {self.cursor_field: max(latest_record_value, current_state_value)}
         return {self.cursor_field: latest_record_value}
@@ -394,7 +395,7 @@ class UpdatedCursorIncrementalStripeStream(StripeStream):
     def read_event_increments(
         self, cursor_field: Optional[List[str]] = None, stream_state: Optional[Mapping[str, Any]] = None
     ) -> Iterable[StreamData]:
-        stream_state = self.update_cursor_field(stream_state or {})
+        stream_state = self._update_cursor_field(stream_state or {})
         for event_slice in self.events_stream.stream_slices(
             sync_mode=SyncMode.incremental, cursor_field=cursor_field, stream_state=stream_state
         ):
@@ -409,11 +410,11 @@ class UpdatedCursorIncrementalStripeStream(StripeStream):
         stream_slice: Optional[Mapping[str, Any]] = None,
         stream_state: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[StreamData]:
-        if not stream_state:
-            # both full refresh and initial incremental sync should use usual endpoints
-            yield from super().read_records(sync_mode, cursor_field=cursor_field, stream_slice=stream_slice, stream_state=stream_state)
-            return
-        yield from self.read_event_increments(cursor_field=cursor_field, stream_state=stream_state)
+        record_generator = super().read_records(sync_mode, cursor_field=cursor_field, stream_slice=stream_slice, stream_state=stream_state) if not stream_state else self.read_event_increments(cursor_field=cursor_field, stream_state=stream_state)
+
+        for record in record_generator:
+            yield record
+            self.state = self.extract_updated_state(record)
 
 
 class IncrementalStripeStreamSelector(IStreamSelector):
@@ -431,8 +432,8 @@ class IncrementalStripeStreamSelector(IStreamSelector):
 
 class IncrementalStripeStream(StripeStream):
     """
-    This class combines both normal incremental sync and event based sync. It uses common endpoints for sliced data syncs in
-    the full refresh sync mode and initial incremental sync. For incremental syncs with a state, event based sync comes into action.
+    This class is meant to be deprecated. Instead, instantiate either the CreatedCursorIncrementalStripeStream or the
+    UpdatedCursorIncrementalStripeStream depending on if there is a state for the stream or not.
     """
 
     def __init__(
@@ -480,9 +481,6 @@ class IncrementalStripeStream(StripeStream):
     ) -> Iterable[Optional[Mapping[str, Any]]]:
         self.parent_stream = self.stream_selector.get_parent_stream(stream_state)
         yield from self.parent_stream.stream_slices(sync_mode, cursor_field, stream_state)
-
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        return self.parent_stream.get_updated_state(current_stream_state, latest_record)
 
     def read_records(
         self,
@@ -717,7 +715,7 @@ class IncrementalStripeLazySubStreamSelector(IStreamSelector):
         return self._updated_incremental_stream if stream_state else self._lazy_sub_stream
 
 
-class UpdatedCursorIncrementalStripeLazySubStream(StripeStream, ABC):
+class UpdatedCursorIncrementalStripeLazySubStream(StripeStream, CheckpointMixin, ABC):
     """
     This stream uses StripeLazySubStream under the hood to run full refresh or initial incremental syncs.
     In case of subsequent incremental syncs, it uses the UpdatedCursorIncrementalStripeStream class.
@@ -774,9 +772,14 @@ class UpdatedCursorIncrementalStripeLazySubStream(StripeStream, ABC):
         self.parent_stream = self.stream_selector.get_parent_stream(stream_state)
         yield from self.parent_stream.stream_slices(sync_mode, cursor_field=cursor_field, stream_state=stream_state)
 
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        # important note: do not call self.parent_stream here as one of the parents does not have the needed method implemented
-        return self.updated_cursor_incremental_stream.get_updated_state(current_stream_state, latest_record)
+    @property
+    def state(self) -> MutableMapping[str, Any]:
+        return self.updated_cursor_incremental_stream.state
+
+    @state.setter
+    def state(self, value: MutableMapping[str, Any]) -> None:
+        """State setter, accept state serialized by state getter."""
+        self.updated_cursor_incremental_stream.state = value
 
     def read_records(
         self,
@@ -785,12 +788,14 @@ class UpdatedCursorIncrementalStripeLazySubStream(StripeStream, ABC):
         stream_slice: Optional[Mapping[str, Any]] = None,
         stream_state: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[StreamData]:
-        yield from self.parent_stream.read_records(
+        for record in self.parent_stream.read_records(
             sync_mode, cursor_field=cursor_field, stream_slice=stream_slice, stream_state=stream_state
-        )
+        ):
+            yield record
+            self.state = self.updated_cursor_incremental_stream.extract_updated_state(record)
 
 
-class ParentIncrementalStipeSubStream(StripeSubStream):
+class ParentIncrementalStipeSubStream(StripeSubStream, CheckpointMixin):
     """
     This stream differs from others in that it runs parent stream in exactly same sync mode it is run itself to generate stream slices.
     It also uses regular /v1 API endpoints to sync data no matter what the sync mode is. This means that the event-based API can only
@@ -803,6 +808,7 @@ class ParentIncrementalStipeSubStream(StripeSubStream):
 
     def __init__(self, cursor_field: str, *args, **kwargs):
         self._cursor_field = cursor_field
+        self._state: MutableMapping[str, Any] = {}
         super().__init__(*args, **kwargs)
 
     def stream_slices(
@@ -820,8 +826,28 @@ class ParentIncrementalStipeSubStream(StripeSubStream):
             for record in parent_records:
                 yield {"parent": record}
 
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        return {self.cursor_field: max(current_stream_state.get(self.cursor_field, 0), latest_record[self.cursor_field])}
+    @property
+    def state(self) -> MutableMapping[str, Any]:
+        return self._state
+
+    @state.setter
+    def state(self, value: MutableMapping[str, Any]) -> None:
+        """State setter, accept state serialized by state getter."""
+        self._state = value if value else {}
+
+    def read_records(
+        self,
+        sync_mode: SyncMode,
+        cursor_field: Optional[List[str]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+    ) -> Iterable[StreamData]:
+        for record in super().read_records(sync_mode, cursor_field=cursor_field, stream_slice=stream_slice, stream_state=stream_state):
+            yield record
+            self.state = self._get_updated_state(record)
+
+    def _get_updated_state(self, latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
+        return {self.cursor_field: max(self.state.get(self.cursor_field, 0), latest_record[self.cursor_field])}
 
     @property
     def raise_on_http_errors(self) -> bool:
