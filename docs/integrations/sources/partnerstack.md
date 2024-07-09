@@ -2,8 +2,6 @@
 
 ## Sync overview
 
-The Partnerstack source supports both Full Refresh only.
-
 This source can sync data for the [Partnerstack API](https://docs.partnerstack.com/reference).
 
 ### Output schema
@@ -23,7 +21,7 @@ This Source is capable of syncing the following core Streams:
 | Feature                   | Supported?\(Yes/No\) | Notes |
 | :------------------------ | :------------------- | :---- |
 | Full Refresh Sync         | Yes                  |       |
-| Incremental - Append Sync | No                   |       |
+| Incremental - Append Sync | Yes                  |       |
 | Namespaces                | No                   |       |
 
 ### Performance considerations
@@ -41,6 +39,7 @@ The Partnerstack connector should not run into Partnerstack API limitations unde
 
 | Version | Date       | Pull Request                                             | Subject                                     |
 |:--------|:-----------|:---------------------------------------------------------|:--------------------------------------------|
+| 0.1.7 | 2024-07-09 | [37775](https://github.com/airbytehq/airbyte/pull/37775) | Add Incremental feature |                                        
 | 0.1.6 | 2024-07-06 | [40881](https://github.com/airbytehq/airbyte/pull/40881) | Update dependencies |
 | 0.1.5 | 2024-06-25 | [40378](https://github.com/airbytehq/airbyte/pull/40378) | Update dependencies |
 | 0.1.4 | 2024-06-22 | [40024](https://github.com/airbytehq/airbyte/pull/40024) | Update dependencies |
