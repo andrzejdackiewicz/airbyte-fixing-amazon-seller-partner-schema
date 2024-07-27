@@ -17,6 +17,7 @@ from source_linkedin_ads.source import (
     CampaignGroups,
     Campaigns,
     Creatives,
+    Posts,
     SourceLinkedinAds,
 )
 from source_linkedin_ads.streams import LINKEDIN_VERSION_API
@@ -84,6 +85,7 @@ class TestAllStreams:
             CampaignGroups,
             Campaigns,
             Creatives,
+            Posts,
             AdCampaignAnalytics,
             AdCreativeAnalytics,
         ],
@@ -93,6 +95,7 @@ class TestAllStreams:
             "CampaignGroups",
             "Campaigns",
             "Creatives",
+            "Posts",
             "AdCampaignAnalytics",
             "AdCreativeAnalytics",
         ],
@@ -130,6 +133,7 @@ class TestAllStreams:
             (CampaignGroups, {"account_id": 123}, "adAccounts/123/adCampaignGroups"),
             (Campaigns, {"account_id": 123}, "adAccounts/123/adCampaigns"),
             (Creatives, {"account_id": 123}, "adAccounts/123/creatives"),
+            (Posts, {"account_id": 123}, "posts"),
             (AdCampaignAnalytics, None, "adAnalytics"),
             (AdCreativeAnalytics, None, "adAnalytics"),
         ],
@@ -139,6 +143,7 @@ class TestAllStreams:
             "CampaignGroups",
             "Campaigns",
             "Creatives",
+            "Posts",
             "AdCampaignAnalytics",
             "AdCreativeAnalytics",
         ],
@@ -236,8 +241,13 @@ class TestLinkedInAdsStreamSlicing:
                 {"campaign_id": 123},
                 "pageSize=100&q=criteria",
             ),
+            (
+                Posts,
+                {"account_id": 123},
+                {"count": 100, "q": "dscAdAccount", "dscAdAccount": "urn:li:sponsoredAccount:123"},
+            ),
         ],
-        ids=["AccountUsers", "CampaignGroups", "Campaigns", "Creatives"],
+        ids=["AccountUsers", "CampaignGroups", "Campaigns", "Creatives", "Posts"],
     )
     def test_request_params(self, stream_cls, slice, expected):
         stream = stream_cls(TEST_CONFIG)
