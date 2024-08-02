@@ -3,13 +3,16 @@
 #
 
 import argparse
+import contextlib
 import importlib
+import io
 import ipaddress
 import logging
 import os.path
 import socket
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from functools import wraps
 from typing import Any, DefaultDict, Iterable, List, Mapping, MutableMapping, Optional, Union
@@ -52,6 +55,7 @@ class AirbyteEntrypoint(object):
         # set up parent parsers
         parent_parser = argparse.ArgumentParser(add_help=False)
         parent_parser.add_argument("--debug", action="store_true", help="enables detailed debug logs related to the sync")
+        parent_parser.add_argument("--flush", type=float, default=0, help="flush interval in seconds (0 to disable)")
         main_parser = argparse.ArgumentParser()
         subparsers = main_parser.add_subparsers(title="commands", dest="command")
 
@@ -232,10 +236,25 @@ class AirbyteEntrypoint(object):
 def launch(source: Source, args: List[str]) -> None:
     source_entrypoint = AirbyteEntrypoint(source)
     parsed_args = source_entrypoint.parse_args(args)
-    for message in source_entrypoint.run(parsed_args):
-        # simply printing is creating issues for concurrent CDK as Python uses different two instructions to print: one for the message and
-        # the other for the break line. Adding `\n` to the message ensure that both are printed at the same time
-        print(f"{message}\n", end="", flush=True)
+    messages = iter(source_entrypoint.run(parsed_args))
+
+    if parsed_args.flush == 0:
+        for message in messages:
+            print(f"{message}\n", end="", flush=True)
+        return
+
+    while True:
+        with contextlib.closing(io.StringIO()) as buffer:
+            try:
+                with contextlib.redirect_stdout(buffer):
+                    end_time = time.monotonic() + parsed_args.flush
+                    while time.monotonic() < end_time:
+                        message = next(messages)
+                        buffer.write(f"{message}\n")
+            except StopIteration:
+                break
+            finally:
+                print(buffer.getvalue(), end="", flush=True)
 
 
 def _init_internal_request_filter() -> None:
