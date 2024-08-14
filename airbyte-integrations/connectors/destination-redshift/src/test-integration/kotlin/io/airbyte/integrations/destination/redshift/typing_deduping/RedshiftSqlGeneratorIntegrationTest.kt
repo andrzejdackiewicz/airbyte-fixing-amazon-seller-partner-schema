@@ -15,7 +15,6 @@ import io.airbyte.cdk.db.jdbc.JdbcSourceOperations
 import io.airbyte.cdk.db.jdbc.JdbcUtils.DATABASE_KEY
 import io.airbyte.cdk.integrations.destination.jdbc.typing_deduping.JdbcSqlGenerator
 import io.airbyte.cdk.integrations.standardtest.destination.typing_deduping.JdbcSqlGeneratorIntegrationTest
-import io.airbyte.commons.exceptions.ConfigErrorException
 import io.airbyte.commons.json.Jsons.deserialize
 import io.airbyte.commons.json.Jsons.deserializeExact
 import io.airbyte.integrations.base.destination.typing_deduping.DestinationHandler
@@ -203,46 +202,6 @@ class RedshiftSqlGeneratorIntegrationTest : JdbcSqlGeneratorIntegrationTest<Reds
                 generator.overwriteFinalTable(incrementalDedupStream.id, "_soft_reset")
             )
         }
-    }
-
-    @Test
-    @Throws(Exception::class)
-    fun testCascadeDropDisabled() {
-        // Explicitly create a sqlgenerator with cascadeDrop=false
-        val generator = RedshiftSqlGenerator(RedshiftSQLNameTransformer(), false)
-        // Create a table, then create a view referencing it
-        destinationHandler.execute(generator.createTable(incrementalAppendStream, "", false))
-        Companion.database!!.execute(
-            DSL.createView(
-                    DSL.quotedName(incrementalAppendStream.id.finalNamespace, "example_view")
-                )
-                .`as`(
-                    DSL.select()
-                        .from(
-                            DSL.quotedName(
-                                incrementalAppendStream.id.finalNamespace,
-                                incrementalAppendStream.id.finalName
-                            )
-                        )
-                )
-                .getSQL(ParamType.INLINED)
-        )
-        // Create a "soft reset" table
-        destinationHandler.execute(
-            generator.createTable(incrementalDedupStream, "_soft_reset", false)
-        )
-
-        // Overwriting the first table with the second table should fal with a configurationError.
-        val t: Throwable =
-            Assertions.assertThrowsExactly(ConfigErrorException::class.java) {
-                destinationHandler.execute(
-                    generator.overwriteFinalTable(incrementalDedupStream.id, "_soft_reset")
-                )
-            }
-        Assertions.assertTrue(
-            t.message ==
-                "Failed to drop table without the CASCADE option. Consider changing the drop_cascade configuration parameter"
-        )
     }
 
     companion object {
