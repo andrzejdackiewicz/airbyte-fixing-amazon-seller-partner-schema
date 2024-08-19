@@ -29,7 +29,7 @@ from airbyte_cdk.sources.utils.schema_helpers import ResourceSchemaLoader
 from airbyte_cdk.sources.utils.transform import TransformConfig, TypeTransformer
 from airbyte_cdk.utils import AirbyteTracedException
 from requests import HTTPError, codes
-from source_hubspot.constants import OAUTH_CREDENTIALS, PRIVATE_APP_CREDENTIALS
+from source_hubspot.constants import OAUTH_CREDENTIALS, PRIVATE_APP_CREDENTIALS, STANDARD_STREAM_NAMES
 from source_hubspot.errors import HubspotAccessDenied, HubspotInvalidAuth, HubspotRateLimited, HubspotTimeout, InvalidStartDateConfigError
 from source_hubspot.helpers import (
     APIPropertiesWithHistory,
@@ -2254,7 +2254,9 @@ class CustomObject(CRMSearchStream, ABC):
 
     @property
     def name(self) -> str:
-        return self.entity
+        """Name of the custom object stream. Use the fully qualified object name (e.g. p1234567_owners) if the stream name collides
+        with a standard stream name (e.g. owners) to avoid duplicate stream name error."""
+        return self.fully_qualified_name if self.entity in STANDARD_STREAM_NAMES else self.entity
 
     def get_json_schema(self) -> Mapping[str, Any]:
         return self.schema
