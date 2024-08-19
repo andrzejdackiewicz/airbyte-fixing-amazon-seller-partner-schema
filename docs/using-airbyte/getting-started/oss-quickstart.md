@@ -22,7 +22,7 @@ If you've already set up an Airbyte instance using Docker Compose and want to mo
 
 For the best experience, we recommend [Deploying Airbyte on Kubernetes via Helm](../../deploying-airbyte/deploying-airbyte.md). 
 
-On a local deployment, Airbyte's default behavior is to store connector secrets in your configured database. These secrets are stored in plain text and are not encrypted. Refer to the [Secret Management documentation](../../deploying-airbyte/integrations/secrets.md) to set up an external secrets manager.
+On a local deployment, Airbyte's default behavior is to store connector secrets in your configured database. These secrets are stored in plain text and are not encrypted. Refer to the [Secret Management documentation](../../deploying-airbyte/configurations/secrets.md) to set up an external secrets manager.
 :::
 
 If setting up an Airbyte server does not fit your use case needs (i.e. you're using Jupyter Notebooks or iterating on an early prototype for your project) you may find the [PyAirbyte](../pyairbyte/getting-started.mdx) documentation useful.
@@ -187,7 +187,7 @@ Which should output something similar to:
 ```
 
 Use the value in the password field to authenticate to your new Airbyte instance. If you wish to configure 
-authentication follow the documentation on the [Authentication Integration](../../deploying-airbyte/integrations/authentication) 
+authentication follow the documentation on the [Authentication Configuration](../../deploying-airbyte/configurations/authentication)
 page.
 
 As long as your Docker Desktop daemon is running in the background, you can use Airbyte by returning to [http://localhost:8000](http://localhost:8000). 
@@ -226,9 +226,9 @@ abctl local install --values ./values.yaml
 
 Here's a list of common customizations.
 
-- [External Database](../../deploying-airbyte/integrations/database)
-- [State and Logging Storage](../../deploying-airbyte/integrations/storage)
-- [Secret Management](../../deploying-airbyte/integrations/secrets)
+- [External Database](../../deploying-airbyte/configurations/database)
+- [State and Logging Storage](../../deploying-airbyte/configurations/storage)
+- [Secret Management](../../deploying-airbyte/configurations/secrets)
 
 ## Migrating from Docker Compose (Optional)
 
