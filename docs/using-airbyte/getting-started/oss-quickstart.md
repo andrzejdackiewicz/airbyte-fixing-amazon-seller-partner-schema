@@ -359,9 +359,9 @@ In `abctl` [v0.11.0](https://github.com/airbytehq/abctl/releases/tag/v0.11.0), s
 Airbyte is aware of situations where the email is not be automatically populated and we are working on addressing this within the `abctl` tool.  In the interim, some manually steps are required to retrieve the authentication email address when it is unknown.
 :::
 
-If the email address for authenticating is not automatically populated, and you are unsure what the login email should be, the email can be retrieved from the database used by Airbyte. If using an external database, you will need to connect to the database and execute the query `SELECT "email" FROM "user"`.  If using the database automatically included with the `abctl local install` command, you will need to install [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) and execute the following command:
+If the email address for authenticating is not automatically populated, and you are unsure what the login email should be, the email can be retrieved from the database used by Airbyte. If using an external database, you will need to connect to the database and execute the query `SELECT "email" FROM "organization"`.  If using the database automatically included with the `abctl local install` command, you will need to install [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) and execute the following command:
 ```
-kubectl exec --kubeconfig ~/.airbyte/abctl/abctl.kubeconfig --namespace airbyte-abctl -it airbyte-db-0 -- psql -U airbyte -d db-airbyte -t -A -c 'SELECT "email" FROM "user"'
+kubectl exec --kubeconfig ~/.airbyte/abctl/abctl.kubeconfig --namespace airbyte-abctl -it airbyte-db-0 -- psql -U airbyte -d db-airbyte -t -A -c 'SELECT "email" FROM "organization"'
 ```
 
 The password for this user can be retrieved by running `abctl local credentials`.
