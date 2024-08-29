@@ -91,12 +91,6 @@ class CheckIsInlineCandidate(Step):
         )
 
 
-def copy_directory(src: Path, dest: Path) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(src, dest)
-
-
 class RestoreInlineState(Step):
     context: ConnectorContext
 
@@ -204,7 +198,7 @@ class InlineSchemas(Step):
             _update_inline_schema(schema_loader, json_streams, stream_name)
 
         write_yaml(data, manifest_path)
-        await format_prettier([manifest_path], logger=logger)
+        # await format_prettier([manifest_path], logger=logger)
 
         for json_stream in json_streams.values():
             logger.info(f"     !! JSON schema not found: {json_stream.name}")
@@ -219,8 +213,6 @@ class RemoveUnusedJsonSchamas(Step):
 
     async def _run(self) -> StepResult:
         connector = self.context.connector
-        connector_path = connector.code_directory
-        manifest_path = connector.manifest_path
         python_path = connector.python_source_dir_path
         schemas_path = python_path / SCHEMAS_DIR_NAME
         logger = self.logger
@@ -252,6 +244,12 @@ class JsonStream:
 class JsonLoaderNode:
     ref: str
     file_path: str
+
+
+def copy_directory(src: Path, dest: Path) -> None:
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest)
 
 
 def _has_subdirectory(directory: Path) -> bool:
