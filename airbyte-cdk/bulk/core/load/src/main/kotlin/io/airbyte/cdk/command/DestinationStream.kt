@@ -4,6 +4,7 @@
 
 package io.airbyte.cdk.command
 
+import io.airbyte.protocol.models.v0.AirbyteStream
 import io.airbyte.protocol.models.v0.ConfiguredAirbyteStream
 import jakarta.inject.Singleton
 
@@ -29,6 +30,15 @@ class DestinationStream(val descriptor: Descriptor) {
     override fun toString(): String {
         return "DestinationStream(descriptor=$descriptor)"
     }
+
+    fun toProtocolMessage(): ConfiguredAirbyteStream =
+        // TODO fill in the rest of this once we have the actual fields
+        ConfiguredAirbyteStream()
+            .withStream(
+                AirbyteStream()
+                    .withNamespace(descriptor.namespace)
+                    .withName(descriptor.name)
+            )
 }
 
 @Singleton
