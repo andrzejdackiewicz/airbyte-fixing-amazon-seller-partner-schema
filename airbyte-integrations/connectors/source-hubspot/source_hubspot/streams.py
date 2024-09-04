@@ -1214,7 +1214,6 @@ class CRMSearchStream(IncrementalStream, ABC):
             records = self.record_unnester.unnest(records)
 
             for record in records:
-                print(record)
                 last_id = self.get_max(record[self.primary_key], last_id) if last_id else record[self.primary_key]
                 yield record
 
