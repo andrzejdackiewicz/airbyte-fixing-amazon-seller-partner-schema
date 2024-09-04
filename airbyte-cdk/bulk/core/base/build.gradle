@@ -35,7 +35,7 @@ dependencies {
     implementation 'org.openapi4j:openapi-schema-validator:1.0.7'
 
     runtimeOnly 'com.google.guava:guava:33.2.0-jre'
-    runtimeOnly 'org.apache.commons:commons-compress:1.26.1'
+    runtimeOnly 'org.apache.commons:commons-compress:1.27.0'
 
     testFixturesApi 'org.jetbrains.kotlin:kotlin-test-junit'
     testFixturesApi 'org.jetbrains.kotlin:kotlin-reflect'
