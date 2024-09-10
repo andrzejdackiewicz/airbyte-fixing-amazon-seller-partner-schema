@@ -15,6 +15,7 @@ from functools import wraps
 from typing import Any, DefaultDict, Iterable, List, Mapping, Optional
 from urllib.parse import urlparse
 
+import orjson
 import requests
 from airbyte_cdk.connector import TConfig
 from airbyte_cdk.exception_handler import init_uncaught_exception_handler
@@ -35,7 +36,6 @@ from airbyte_cdk.utils import PrintBuffer, is_cloud_environment, message_utils
 from airbyte_cdk.utils.airbyte_secrets_utils import get_secrets, update_secrets
 from airbyte_cdk.utils.constants import ENV_REQUEST_CACHE_PATH
 from airbyte_cdk.utils.traced_exception import AirbyteTracedException
-from orjson import orjson
 from requests import PreparedRequest, Response, Session
 
 logger = init_logger("airbyte")
@@ -157,8 +157,17 @@ class AirbyteEntrypoint(object):
         self.set_up_secret_filter(config, source_spec.connectionSpecification)
         if self.source.check_config_against_spec:
             self.validate_connection(source_spec, config)
-        catalog = self.source.discover(self.logger, config)
-
+        try:
+            catalog = self.source.discover(self.logger, config)
+        except AirbyteTracedException as traced_exc:
+            raise traced_exc
+        except Exception as exc:
+            raise AirbyteTracedException(
+                internal_message=f"An error occurred while discovering the source schema. Please check the logged errors for more information: {exc}",
+                failure_type=FailureType.config_error,
+                message="An error occurred while discovering the source schema.",
+                exception=exc,
+            )
         yield from self._emit_queued_messages(self.source)
         yield AirbyteMessage(type=Type.CATALOG, catalog=catalog)
 
@@ -169,8 +178,17 @@ class AirbyteEntrypoint(object):
 
         # The Airbyte protocol dictates that counts be expressed as float/double to better protect against integer overflows
         stream_message_counter: DefaultDict[HashableStreamDescriptor, float] = defaultdict(float)
-        for message in self.source.read(self.logger, config, catalog, state):
-            yield self.handle_record_counts(message, stream_message_counter)
+        try:
+            for message in self.source.read(self.logger, config, catalog, state):
+                yield self.handle_record_counts(message, stream_message_counter)
+        except AirbyteTracedException as ate:
+            raise ate
+        except Exception as exc:
+            raise AirbyteTracedException(
+                internal_message=f"An error occurred while attempting to read from the source. Please check the logged errors for more information. {exc}",
+                message="An error occurred while attempting to read from the source.",
+                failure_type=FailureType.system_error,
+            )
         for message in self._emit_queued_messages(self.source):
             yield self.handle_record_counts(message, stream_message_counter)
 

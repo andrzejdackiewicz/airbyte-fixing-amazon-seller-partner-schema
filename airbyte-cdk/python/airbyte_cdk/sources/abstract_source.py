@@ -26,6 +26,7 @@ from airbyte_cdk.sources.source import Source
 from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.sources.streams.core import StreamData
 from airbyte_cdk.sources.streams.http.http import HttpStream
+from airbyte_cdk.sources.utils.discover_error_handler import AbstractDiscoverErrorHandler, DefaultDiscoverErrorHandler
 from airbyte_cdk.sources.utils.record_helper import stream_data_to_airbyte_message
 from airbyte_cdk.sources.utils.schema_helpers import InternalConfig, split_config
 from airbyte_cdk.sources.utils.slice_logger import DebugSliceLogger, SliceLogger
@@ -67,12 +68,33 @@ class AbstractSource(Source, ABC):
     _stream_to_instance_map: Dict[str, Stream] = {}
     _slice_logger: SliceLogger = DebugSliceLogger()
 
+    def discover_error_handler(self) -> AbstractDiscoverErrorHandler:
+        return DefaultDiscoverErrorHandler()
+
     def discover(self, logger: logging.Logger, config: Mapping[str, Any]) -> AirbyteCatalog:
         """Implements the Discover operation from the Airbyte Specification.
         See https://docs.airbyte.com/understanding-airbyte/airbyte-protocol/#discover.
         """
-        streams = [stream.as_airbyte_stream() for stream in self.streams(config=config)]
-        return AirbyteCatalog(streams=streams)
+        airbyte_streams = []
+        errors = []
+
+        for stream in self.streams(config=config):
+            try:
+                airbyte_streams.append(stream.as_airbyte_stream())
+            except Exception as exception:
+                errors.append(exception)
+                error = self.discover_error_handler().handle_discover_error(logger=logger, exception=exception)
+                if error:
+                    raise error
+
+        if not airbyte_streams:
+            raise AirbyteTracedException(
+                internal_message=f"No streams were discovered in the source. Please check the logged errors for more information: {errors}",
+                message="No streams were discovered in the source. Please check the source configuration.",
+                failure_type=FailureType.config_error,
+            )
+
+        return AirbyteCatalog(streams=airbyte_streams)
 
     def check(self, logger: logging.Logger, config: Mapping[str, Any]) -> AirbyteConnectionStatus:
         """Implements the Check Connection operation from the Airbyte Specification.
