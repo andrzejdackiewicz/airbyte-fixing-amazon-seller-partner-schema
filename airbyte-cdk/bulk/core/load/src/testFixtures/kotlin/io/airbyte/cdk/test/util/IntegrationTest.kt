@@ -6,6 +6,7 @@ package io.airbyte.cdk.test.util
 
 import com.fasterxml.jackson.databind.JsonNode
 import io.airbyte.cdk.command.ConfigurationJsonObjectBase
+import io.airbyte.cdk.message.DestinationMessage
 import io.airbyte.protocol.models.Jsons
 import io.airbyte.protocol.models.v0.AirbyteGlobalState
 import io.airbyte.protocol.models.v0.AirbyteMessage
@@ -22,19 +23,18 @@ import io.airbyte.protocol.models.v0.ConfiguredAirbyteStream
 import io.airbyte.protocol.models.v0.StreamDescriptor
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest
 import kotlinx.coroutines.async
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import javax.inject.Inject
-import kotlin.test.fail
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.apache.commons.lang3.RandomStringUtils
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import kotlin.test.fail
 
 @MicronautTest
 @Execution(ExecutionMode.CONCURRENT)
@@ -81,7 +81,7 @@ abstract class IntegrationTest(
     fun runSync(
         config: ConfigurationJsonObjectBase,
         stream: ConfiguredAirbyteStream,
-        messages: List<Message>,
+        messages: List<DestinationMessage>,
         streamStatus: AirbyteStreamStatus? = AirbyteStreamStatus.COMPLETE,
     ): List<AirbyteMessage> =
         runSync(
@@ -94,7 +94,7 @@ abstract class IntegrationTest(
     fun runSync(
         config: ConfigurationJsonObjectBase,
         catalog: ConfiguredAirbyteCatalog,
-        messages: List<Message>,
+        messages: List<DestinationMessage>,
         streamStatus: AirbyteStreamStatus? = AirbyteStreamStatus.COMPLETE,
     ): List<AirbyteMessage> {
         val destination =
