@@ -29,7 +29,8 @@ If setting up an Airbyte server does not fit your use case needs (i.e. you're us
 
 ## Prerequisites
 
-- To use `abctl`, you'll need to have **Docker Desktop** installed. See Docker's instructions for installation: [Mac](https://docs.docker.com/desktop/install/mac-install/), [Windows](https://docs.docker.com/desktop/install/windows-install/), [Linux](https://docs.docker.com/desktop/install/linux-install/) 
+- To use `abctl`, you'll need to have **Docker Desktop** installed. See Docker's instructions for installation: [Mac](https://docs.docker.com/desktop/install/mac-install/), [Windows](https://docs.docker.com/desktop/install/windows-install/), [Linux](https://docs.docker.com/desktop/install/linux-install/)
+- Minimum of 4 CPUs and 16GB of RAM.
 
 ## 1: Install `abctl`
 
@@ -246,6 +247,10 @@ Here's a list of common customizations.
 
 ## Migrating from Docker Compose (Optional)
 
+:::caution
+When deploying using Docker Compose, Airbyte didn't have specific requirements for resources like CPU and memory. However, this isn't the case for `abctl`. The minimum resources required to run Airbyte with `abctl` are 4 CPUs and 16 GB of RAM. Ensure your machine meets these requirements.
+:::
+
 If you have data that you would like to migrate from an existing docker compose instance follow the steps below:
 
 1. Make sure that you have stopped the instance running in docker compose, this may require the following command:
@@ -273,6 +278,8 @@ If you're using a version of Airbyte that you've installed with `abctl`, you can
 ## Using an EC2 Instance with abctl
 
 This guide will assume that you are using the Amazon Linux distribution. However. any distribution that supports a docker engine should work with `abctl`. The launching and connecting to your EC2 Instance is outside the scope of this guide. You can find more information on how to launch and connect to EC2 Instances in the [Get started with Amazon EC2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html) documentation from Amazon.
+
+The minimum machine recommendation to use is a t3.xlarge (4vCPU/16Gb).
 
 1. Install the docker engine:
 
