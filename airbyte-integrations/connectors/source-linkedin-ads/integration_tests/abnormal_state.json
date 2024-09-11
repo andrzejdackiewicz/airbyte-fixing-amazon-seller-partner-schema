@@ -2,21 +2,21 @@
   {
     "type": "STREAM",
     "stream": {
-      "stream_state": { "lastModified": "2050-01-01" },
+      "stream_state": { "lastModified": "2050-01-01T00:00:00+00:00" },
       "stream_descriptor": { "name": "account_users" }
     }
   },
   {
     "type": "STREAM",
     "stream": {
-      "stream_state": { "lastModified": "2050-01-01" },
+      "stream_state": { "lastModified": "2050-01-01T00:00:00+00:00" },
       "stream_descriptor": { "name": "campaign_groups" }
     }
   },
   {
     "type": "STREAM",
     "stream": {
-      "stream_state": { "lastModified": "2050-01-01" },
+      "stream_state": { "lastModified": "2050-01-01T00:00:00+00:00" },
       "stream_descriptor": { "name": "campaigns" }
     }
   },
@@ -102,6 +102,13 @@
     "stream": {
       "stream_state": { "end_date": "2050-01-01" },
       "stream_descriptor": { "name": "ad_member_company_analytics" }
+    }
+  },
+  {
+    "type": "STREAM",
+    "stream": {
+      "stream_state": { "lastModified": 2524608000000 },
+      "stream_descriptor": { "name": "conversions" }
     }
   }
 ]
