@@ -74,6 +74,7 @@ To set up a Private App, you must manually configure scopes to ensure Airbyte ca
 | `forms`                     | `forms`                                                                                                      |
 | `form_submissions`          | `forms`                                                                                                      |
 | `goals`                     | `crm.objects.goals.read`                                                                                     |
+| `leads`                     | `crm.objects.leads.read`, `crm.schemas.leads.read`                                                   |
 | `line_items`                | `e-commerce`                                                                                                 |
 | `owners`                    | `crm.objects.owners.read`                                                                                    |
 | `products`                  | `e-commerce`                                                                                                 |
@@ -175,6 +176,7 @@ The HubSpot source connector supports the following streams:
 - [Forms](https://developers.hubspot.com/docs/api/marketing/forms) \(Client-Side Incremental\)
 - [Form Submissions](https://legacydocs.hubspot.com/docs/methods/forms/get-submissions-for-a-form) \(Client-Side Incremental\)
 - [Goals](https://developers.hubspot.com/docs/api/crm/goals) \(Incremental\)
+- [Leads](https://developers.hubspot.com/docs/api/crm/leads) \(Incremental\)
 - [Line Items](https://developers.hubspot.com/docs/api/crm/line-items) \(Incremental\)
 - [Marketing Emails](https://legacydocs.hubspot.com/docs/methods/cms_email/get-all-marketing-email-statistics)
 - [Owners](https://developers.hubspot.com/docs/methods/owners/get_owners) \(Client-Side Incremental\)
@@ -335,6 +337,7 @@ The connector is restricted by normal HubSpot [rate limitations](https://legacyd
 
 | Version | Date       | Pull Request                                             | Subject                                                                                                                                                                          |
 |:--------|:-----------|:---------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 4.3.0  | 2024-09-07 | [44481](https://github.com/airbytehq/airbyte/pull/44481) | Add `Leads` stream |
 | 4.2.18 | 2024-08-24 | [43762](https://github.com/airbytehq/airbyte/pull/43762) | Update dependencies |
 | 4.2.17 | 2024-08-21 | [44538](https://github.com/airbytehq/airbyte/pull/44538) | Fix issue with CRM search streams when they have no `associations` |
 | 4.2.16 | 2024-08-20 | [42919](https://github.com/airbytehq/airbyte/pull/42919) | Add support for Deal Splits |
