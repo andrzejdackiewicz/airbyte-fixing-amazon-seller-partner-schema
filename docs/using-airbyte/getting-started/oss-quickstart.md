@@ -324,6 +324,10 @@ By default, `abctl` will listen on port 8000. If port 8000 is already in used or
 Ensure the security group configured for the EC2 Instance allows traffic in on the port (8000 by default, or whatever port was passed to `--port`) that you deploy Airbyte on. See the [Control traffic to your AWS resources using security groups](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html) documentation for more information.
 :::
 
+:::warning
+If you're accessing a non-HTTPs address, such as creating a network rule to access a private EC2 address from your local computer, make sure to configure the cookie settings to allow login on non-secure connections: `abctl local install --insecure-cookies`
+:::
+
 ```shell
 abctl local install --host [HOSTNAME]
 ```
@@ -386,6 +390,13 @@ abctl local credentials --email <USER@COMPANY.EXAMPLE>
 ```
 
 The password for this user can be retrieved by running `abctl local credentials`.
+
+### Invalid username or password
+
+Some users reported trouble accessing the UI with the correct username and password.
+This can happen if you're trying to access a non-localhost address that doesn't have an HTTPS connection configured.
+We strongly recommend configuring an HTTPS connection to access Airbyte. 
+You can install Airbyte disabling the Cookie security: `abctl local install --insecure-cookies`
 
 ### Using Custom Connectors
 In order to run a custom connector with an Airbyte instance that is running in kind, you must load the docker image of that connector into the cluster. A connector container can be loaded using the following command:
