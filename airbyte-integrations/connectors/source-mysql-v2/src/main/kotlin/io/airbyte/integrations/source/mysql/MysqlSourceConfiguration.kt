@@ -63,9 +63,36 @@ class MysqlSourceConfigurationFactory :
         }
         // Determine protocol and configure encryption.
         val encryption: Encryption = pojo.getEncryptionValue()
-        if (encryption is SslVerifyCertificate) {
-            // TODO: reuse JdbcSSLCOnnectionUtils; parse the input into properties
+        val sslMode = pojo.encryption.encryptionMethod
+        val jdbcEncryptionBuilder = MysqlJdbcEncryption.Builder().setSslMode(sslMode)
+
+        when (encryption) {
+            is EncryptionPreferred,
+            is EncryptionRequired -> Unit
+            is SslVerifyCertificate -> {
+                jdbcEncryptionBuilder.apply {
+                    setCaCertificate(encryption.sslCertificate)
+                    if (encryption.sslClientKey != null) setClientKey(encryption.sslClientKey!!)
+                    if (encryption.sslClientCertificate != null)
+                        setClientCertificate(encryption.sslClientCertificate!!)
+                    if (encryption.sslClientPassword != null)
+                        setClientKeyPassword(encryption.sslClientPassword!!)
+                }
+            }
+            is SslVerifyIdentity -> {
+                jdbcEncryptionBuilder.apply {
+                    setCaCertificate(encryption.sslCertificate)
+                    if (encryption.sslClientKey != null) setClientKey(encryption.sslClientKey!!)
+                    if (encryption.sslClientCertificate != null)
+                        setClientCertificate(encryption.sslClientCertificate!!)
+                    if (encryption.sslClientPassword != null)
+                        setClientKeyPassword(encryption.sslClientPassword!!)
+                }
+            }
         }
+        val sslJdbcParameters = jdbcEncryptionBuilder.build().parseSSLConfig()
+        jdbcProperties.putAll(sslJdbcParameters)
+
         // Build JDBC URL
         val address = "%s:%d"
         val jdbcUrlFmt = "jdbc:mysql://${address}"
