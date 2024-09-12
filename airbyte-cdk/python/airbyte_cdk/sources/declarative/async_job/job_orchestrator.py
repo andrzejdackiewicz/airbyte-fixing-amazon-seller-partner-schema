@@ -84,10 +84,12 @@ class AsyncJobOrchestrator:
         job_repository: AsyncJobRepository,
         slices: Iterable[StreamSlice],
         number_of_retries: Optional[int] = None,
+        exceptions_to_break_on: Optional[Iterable[Exception]] = (),
     ) -> None:
         self._job_repository: AsyncJobRepository = job_repository
         self._slice_iterator = iter(slices)
         self._running_partitions: List[AsyncPartition] = []
+        self._exceptions_to_break_on: Iterable[Exception] = tuple(exceptions_to_break_on)
 
     def _replace_failed_jobs(self, partition: AsyncPartition) -> None:
         failed_status_jobs = (AsyncJobStatus.FAILED, AsyncJobStatus.TIMED_OUT)
@@ -222,7 +224,12 @@ class AsyncJobOrchestrator:
             Each partition is wrapped in an Optional, allowing for None values.
         """
         while True:
-            self._start_jobs()
+            try:
+                self._start_jobs()
+            except self._exceptions_to_break_on as e:
+                raise e
+            except AirbyteTracedException as e:
+                LOGGER.error(f"Failed to start the Job: {e.message} , {e.internal_message}")
             if not self._running_partitions:
                 break
 
