@@ -1,0 +1,614 @@
+version: 4.5.4
+
+type: DeclarativeSource
+
+description: ""
+
+check:
+  type: CheckStream
+  stream_names:
+    - Products
+
+definitions:
+  streams:
+    CI-Test:
+      type: DeclarativeStream
+      name: CI-Test
+      retriever:
+        type: SimpleRetriever
+        paginator:
+          type: DefaultPaginator
+          page_token_option:
+            type: RequestOption
+            field_name: page
+            inject_into: request_parameter
+          pagination_strategy:
+            type: PageIncrement
+            inject_on_first_request: true
+        requester:
+          $ref: "#/definitions/base_requester"
+          path: c/citests/
+          http_method: GET
+          request_parameters:
+            pageSize: "500"
+        record_selector:
+          type: RecordSelector
+          extractor:
+            type: DpathExtractor
+            field_path:
+              - items
+          schema_normalization: Default
+      schema_loader:
+        type: InlineSchemaLoader
+        schema:
+          $ref: "#/schemas/CI-Test"
+    Products:
+      type: DeclarativeStream
+      name: Products
+      retriever:
+        type: SimpleRetriever
+        paginator:
+          type: DefaultPaginator
+          page_token_option:
+            type: RequestOption
+            field_name: page
+            inject_into: request_parameter
+          pagination_strategy:
+            type: PageIncrement
+            inject_on_first_request: true
+        requester:
+          $ref: "#/definitions/base_requester"
+          path: headless-commerce-admin-catalog/v1.0/products
+          http_method: GET
+          request_parameters:
+            pageSize: "500"
+        record_selector:
+          type: RecordSelector
+          extractor:
+            type: DpathExtractor
+            field_path:
+              - items
+          schema_normalization: Default
+      schema_loader:
+        type: InlineSchemaLoader
+        schema:
+          $ref: "#/schemas/Products"
+  base_requester:
+    type: HttpRequester
+    url_base: https://webserver-controlwaredxp-dev.lfr.cloud/o/
+    authenticator:
+      type: OAuthAuthenticator
+      client_id: "{{ config[\"client_id\"] }}"
+      grant_type: client_credentials
+      client_secret: "{{ config[\"client_secret\"] }}"
+      refresh_request_body: {}
+      token_refresh_endpoint: https://webserver-controlwaredxp-dev.lfr.cloud/o/oauth2/token
+
+streams:
+  - $ref: "#/definitions/streams/Products"
+  - $ref: "#/definitions/streams/CI-Test"
+
+spec:
+  type: Spec
+  connection_specification:
+    type: object
+    $schema: http://json-schema.org/draft-07/schema#
+    required:
+      - client_id
+      - client_secret
+    properties:
+      client_id:
+        type: string
+        order: 0
+        title: Client ID
+        airbyte_secret: true
+      client_secret:
+        type: string
+        order: 1
+        title: Client secret
+        airbyte_secret: true
+    additionalProperties: true
+
+metadata:
+  assist: {}
+  testedStreams:
+    CI-Test:
+      hasRecords: true
+      streamHash: d0a31ce0965e12ebc593a719da5199bdd71ea0ca
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+    Products:
+      hasRecords: true
+      streamHash: 646c96bced81d71e0f133f6d9138845ba146a1f1
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+  autoImportSchema:
+    CI-Test: true
+    Products: true
+
+schemas:
+  CI-Test:
+    type: object
+    $schema: http://json-schema.org/schema#
+    properties:
+      id:
+        type:
+          - number
+          - "null"
+      status:
+        type:
+          - object
+          - "null"
+        properties:
+          code:
+            type:
+              - number
+              - "null"
+          label:
+            type:
+              - string
+              - "null"
+          label_i18n:
+            type:
+              - string
+              - "null"
+      actions:
+        type:
+          - object
+          - "null"
+        properties:
+          get:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          delete:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          update:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          replace:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          permissions:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+      creator:
+        type:
+          - object
+          - "null"
+        properties:
+          id:
+            type:
+              - number
+              - "null"
+          name:
+            type:
+              - string
+              - "null"
+          givenName:
+            type:
+              - string
+              - "null"
+          familyName:
+            type:
+              - string
+              - "null"
+          contentType:
+            type:
+              - string
+              - "null"
+          additionalName:
+            type:
+              - string
+              - "null"
+      orderNo:
+        type:
+          - string
+          - "null"
+      pricePA:
+        type:
+          - number
+          - "null"
+      ibStatus:
+        type:
+          - object
+          - "null"
+        properties:
+          key:
+            type:
+              - string
+              - "null"
+          name:
+            type:
+              - string
+              - "null"
+      keywords:
+        type:
+          - array
+          - "null"
+      quantity:
+        type:
+          - number
+          - "null"
+      dateCreated:
+        type:
+          - string
+          - "null"
+      dateModified:
+        type:
+          - string
+          - "null"
+      serialnumber:
+        type:
+          - string
+          - "null"
+      inventoryNumber:
+        type:
+          - string
+          - "null"
+      maintenanceType:
+        type:
+          - object
+          - "null"
+        properties:
+          key:
+            type:
+              - string
+              - "null"
+          name:
+            type:
+              - string
+              - "null"
+      accountCiTestERC:
+        type:
+          - string
+          - "null"
+      externalReferenceCode:
+        type:
+          - string
+          - "null"
+      taxonomyCategoryBriefs:
+        type:
+          - array
+          - "null"
+      r_accountCiTest_accountEntryId:
+        type:
+          - number
+          - "null"
+      r_accountCiTest_accountEntryERC:
+        type:
+          - string
+          - "null"
+    additionalProperties: true
+  Products:
+    type: object
+    $schema: http://json-schema.org/schema#
+    properties:
+      version:
+        type:
+          - number
+          - "null"
+      description:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      id:
+        type:
+          - number
+          - "null"
+      name:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      tags:
+        type:
+          - array
+          - "null"
+      urls:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      active:
+        type:
+          - boolean
+          - "null"
+      actions:
+        type:
+          - object
+          - "null"
+        properties:
+          get:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          delete:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+          update:
+            type:
+              - object
+              - "null"
+            properties:
+              href:
+                type:
+                  - string
+                  - "null"
+              method:
+                type:
+                  - string
+                  - "null"
+      expando:
+        type:
+          - object
+          - "null"
+        properties:
+          Unit:
+            type:
+              - string
+              - "null"
+          quantity:
+            type:
+              - number
+              - "null"
+          Delivery Time:
+            type:
+              - string
+              - "null"
+          eclass_category:
+            type:
+              - string
+              - "null"
+      catalogId:
+        type:
+          - number
+          - "null"
+      metaTitle:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      productId:
+        type:
+          - number
+          - "null"
+      thumbnail:
+        type:
+          - string
+          - "null"
+      categories:
+        type:
+          - array
+          - "null"
+        items:
+          type:
+            - object
+            - "null"
+          properties:
+            id:
+              type:
+                - number
+                - "null"
+            name:
+              type:
+                - string
+                - "null"
+            vocabulary:
+              type:
+                - string
+                - "null"
+            externalReferenceCode:
+              type:
+                - string
+                - "null"
+      createDate:
+        type:
+          - string
+          - "null"
+      displayDate:
+        type:
+          - string
+          - "null"
+      metaKeyword:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      productType:
+        type:
+          - string
+          - "null"
+      customFields:
+        type:
+          - array
+          - "null"
+        items:
+          type:
+            - object
+            - "null"
+          properties:
+            name:
+              type:
+                - string
+                - "null"
+            dataType:
+              type:
+                - string
+                - "null"
+            customValue:
+              type:
+                - object
+                - "null"
+              properties:
+                data:
+                  type:
+                    - number
+                    - string
+                    - "null"
+      modifiedDate:
+        type:
+          - string
+          - "null"
+      skuFormatted:
+        type:
+          - string
+          - "null"
+      productStatus:
+        type:
+          - number
+          - "null"
+      metaDescription:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      productTypeI18n:
+        type:
+          - string
+          - "null"
+      shortDescription:
+        type:
+          - object
+          - "null"
+        properties:
+          de_DE:
+            type:
+              - string
+              - "null"
+      workflowStatusInfo:
+        type:
+          - object
+          - "null"
+        properties:
+          code:
+            type:
+              - number
+              - "null"
+          label:
+            type:
+              - string
+              - "null"
+          label_i18n:
+            type:
+              - string
+              - "null"
+      productChannelFilter:
+        type:
+          - boolean
+          - "null"
+      externalReferenceCode:
+        type:
+          - string
+          - "null"
+      productAccountGroupFilter:
+        type:
+          - boolean
+          - "null"
+      r_productRelationship_c_manufacturerId:
+        type:
+          - number
+          - "null"
+      r_productRelationship_c_manufacturerERC:
+        type:
+          - string
+          - "null"
+    additionalProperties: true
