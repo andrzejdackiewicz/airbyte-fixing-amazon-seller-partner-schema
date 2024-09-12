@@ -143,6 +143,8 @@ The Zendesk Support source connector supports the following streams:
 - [Ticket Skips](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_skips/) \(Incremental\)
 - [Users](https://developer.zendesk.com/api-reference/ticketing/ticket-management/incremental_exports/#incremental-user-export) \(Incremental\)
 - [UserFields](https://developer.zendesk.com/api-reference/ticketing/users/user_fields/#list-user-fields)
+- [Categories](https://developer.zendesk.com/api-reference/help_center/help-center-api/categories/#list-categories)
+- [Sections](https://developer.zendesk.com/api-reference/help_center/help-center-api/sections/#list-sections)
 
 ### Deleted Records Support
 
@@ -184,6 +186,7 @@ The Zendesk connector ideally should not run into Zendesk API limitations under 
 
 | Version | Date       | Pull Request                                             | Subject                                                                                                                                                                                                                            |
 |:--------|:-----------|:---------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 4.3.0 | 2024-09-11 | [45392](https://github.com/airbytehq/airbyte/pull/45392) | Add `Categories` and `Sections` stream |
 | 4.2.0 | 2024-09-10 | [44610](https://github.com/airbytehq/airbyte/pull/44610) | Add `Automations` and `Triggers` stream |
 | 4.1.1 | 2024-09-07 | [45215](https://github.com/airbytehq/airbyte/pull/45215) | Update dependencies |
 | 4.1.0 | 2024-09-06 | [45187](https://github.com/airbytehq/airbyte/pull/45187) | Migrate to CDK v5 |
